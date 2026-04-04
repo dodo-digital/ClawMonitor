@@ -1,0 +1,78 @@
+{
+  "name": "clawmonitor",
+  "version": "1.0.0",
+  "description": "ClawMonitor – OpenClaw observability dashboard",
+  "type": "module",
+  "main": "build/server/index.js",
+  "scripts": {
+    "dev": "tsx watch server/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node build/server/index.js",
+    "typecheck": "npm run typecheck:server && npm run typecheck:app",
+    "typecheck:server": "tsc -p tsconfig.json --noEmit",
+    "typecheck:app": "tsc -p tsconfig.app.json --noEmit",
+    "lint": "eslint . --ext .ts,.tsx,.js",
+    "ws:probe": "tsx server/scripts/ws-probe.ts",
+    "cli": "tsx server/scripts/monitor-cli.ts",
+    "test": "vitest run --exclude server/__tests__/contracts/**",
+    "test:watch": "vitest --exclude server/__tests__/contracts/**",
+    "test:unit": "vitest run server/__tests__/lib server/__tests__/monitor",
+    "test:integration": "vitest run server/__tests__/routes server/__tests__/ws server/__tests__/smoke.test.ts server/__tests__/startup --passWithNoTests",
+    "test:cli": "vitest run server/__tests__/scripts",
+    "test:contracts": "vitest run server/__tests__/contracts/",
+    "coverage": "vitest run --coverage"
+  },
+  "bin": {
+    "monitor": "./bin/monitor.js",
+    "cron-cli": "./bin/cron-cli.js"
+  },
+  "keywords": ["openclaw", "monitoring", "observability", "incidents", "notifications"],
+  "author": "Dodo Digital (https://dododigital.ai)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dodo-digital/ClawMonitor.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.8.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.0",
+    "express": "^5.2.1",
+    "js-yaml": "^4.1.1",
+    "lucide-react": "^1.7.0",
+    "puppeteer-core": "^24.40.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router": "^7.13.2",
+    "swr": "^2.4.1",
+    "tailwind-merge": "^3.5.0",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/supertest": "^7.2.0",
+    "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^8.46.1",
+    "@typescript-eslint/parser": "^8.46.1",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/coverage-v8": "^4.1.2",
+    "eslint": "^9.37.0",
+    "supertest": "^7.2.2",
+    "tailwindcss": "^4.2.2",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  }
+}

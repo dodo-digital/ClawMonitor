@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme {
+  /* Warm dark theme — less "AI dashboard", more editorial */
+  --color-cream: hsl(220, 10%, 8%);
+  --color-cream-dark: hsl(220, 8%, 12%);
+  --color-ink: hsl(220, 12%, 92%);
+  --color-ink-muted: hsl(220, 6%, 52%);
+  --color-ink-faint: hsl(220, 4%, 36%);
+  --color-sidebar: hsl(220, 12%, 6%);
+  --color-sidebar-hover: hsl(220, 10%, 10%);
+  --color-sidebar-active: hsl(220, 8%, 13%);
+  --color-sidebar-text: hsl(220, 4%, 46%);
+  --color-sidebar-text-active: hsl(220, 8%, 90%);
+  --color-accent: hsl(24, 70%, 50%);
+  --color-accent-muted: hsl(24, 55%, 52%);
+  --color-accent-bg: hsl(24, 40%, 12%);
+  --color-healthy: hsl(152, 45%, 42%);
+  --color-healthy-bg: hsl(152, 25%, 11%);
+  --color-warning: hsl(38, 75%, 52%);
+  --color-warning-bg: hsl(38, 35%, 11%);
+  --color-error: hsl(0, 55%, 52%);
+  --color-error-bg: hsl(0, 30%, 12%);
+  --color-card: hsl(220, 9%, 10.5%);
+  --color-border: hsl(220, 7%, 15%);
+  --color-overlay: hsl(220, 15%, 3% / 0.6);
+
+  --color-channel-telegram: hsl(210, 55%, 48%);
+  --color-channel-webchat: hsl(152, 45%, 40%);
+  --color-channel-cron: hsl(220, 4%, 42%);
+  --color-channel-hook: hsl(24, 70%, 48%);
+  --color-channel-slack: hsl(270, 45%, 52%);
+  --color-channel-main: hsl(210, 35%, 52%);
+  --color-channel-unknown: hsl(220, 4%, 42%);
+
+  --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-cream);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(220, 6%, 20%);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(220, 6%, 28%);
+}
+
+/* Skeleton loading animation */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+.skeleton {
+  animation: skeleton-pulse 1.8s ease-in-out infinite;
+  background: var(--color-cream-dark);
+  border-radius: 6px;
+}
+
+/* Slide-in animation for detail panels */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.animate-slide-in {
+  animation: slide-in-right 0.2s ease-out;
+}

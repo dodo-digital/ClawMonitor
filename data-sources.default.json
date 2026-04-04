@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "daily-notes",
+      "name": "Daily Notes",
+      "description": "Auto-generated daily logs with session transcripts, call notes, and summaries",
+      "type": "filesystem",
+      "path": "memory/",
+      "native": true,
+      "renderer": "dated-markdown",
+      "glob": "*.md"
+    },
+    {
+      "id": "para-projects",
+      "name": "Projects",
+      "description": "Active work with a deadline or clear deliverable",
+      "type": "filesystem",
+      "path": "life/projects/",
+      "native": false,
+      "renderer": "entity-facts",
+      "glob": "**/items.json"
+    },
+    {
+      "id": "para-areas",
+      "name": "Areas",
+      "description": "Ongoing responsibilities: companies, people, and recurring systems",
+      "type": "filesystem",
+      "path": "life/areas/",
+      "native": false,
+      "renderer": "entity-facts",
+      "glob": "**/items.json"
+    },
+    {
+      "id": "para-resources",
+      "name": "Resources",
+      "description": "Topics of interest saved for reference",
+      "type": "filesystem",
+      "path": "life/resources/",
+      "native": false,
+      "renderer": "entity-facts",
+      "glob": "**/items.json"
+    },
+    {
+      "id": "para-goals",
+      "name": "Goals",
+      "description": "Explicit goals being tracked over time",
+      "type": "filesystem",
+      "path": "life/goals/",
+      "native": false,
+      "renderer": "entity-facts",
+      "glob": "**/items.json"
+    },
+    {
+      "id": "para-research",
+      "name": "Research",
+      "description": "Deeper investigations and analysis the agent has conducted",
+      "type": "filesystem",
+      "path": "life/research/",
+      "native": false,
+      "renderer": "entity-facts",
+      "glob": "**/items.json"
+    },
+    {
+      "id": "para-archives",
+      "name": "Archives",
+      "description": "Completed or inactive items moved out of active categories",
+      "type": "filesystem",
+      "path": "life/archives/",
+      "native": false,
+      "renderer": "entity-facts",
+      "glob": "**/items.json"
+    }
+  ]
+}
