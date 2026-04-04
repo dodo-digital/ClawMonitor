@@ -1,6 +1,6 @@
 # Claw Monitor
 
-Claw Monitor is built to make OpenClaw reliable. It watches your instance, runs health checks, opens incidents when something breaks, and notifies you so you or an agent can fix it before it compounds.
+Claw Monitor makes OpenClaw reliable. It watches your instance, runs health checks, opens incidents when something breaks, and notifies you so you or an agent can fix it before it compounds.
 
 ## Getting Started
 
