@@ -1,183 +1,350 @@
 import { useState } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
+import { Badge } from "@/components/ui/badge";
 import { ErrorState } from "@/components/ui/error-state";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import {
+  useAccessSurface,
+  useChannelActivity,
   useSecurityLatest,
-  useSecurityHistory,
+  type AccessChannel,
+  type AccessWebhook,
+  type ChannelActivity,
   type SecurityComplianceReport,
   type SecurityCategoryScore,
-  type SecurityCredentialCategory,
-  type SecuritySkillDriftCategory,
 } from "@/lib/api";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { cn, formatRelativeTime, formatNumber } from "@/lib/utils";
 import {
   ShieldCheck,
   ShieldAlert,
-  AlertTriangle,
-  RefreshCw,
+  ChevronDown,
+  ChevronRight,
   Check,
   X,
   Minus,
+  RefreshCw,
+  Globe,
+  Webhook,
+  Server,
+  Activity,
 } from "lucide-react";
 
 export function Security() {
-  const { data: latest, error, mutate } = useSecurityLatest();
-  const { data: history } = useSecurityHistory();
+  const { data: surface, error: surfaceErr, mutate: retrySurface } = useAccessSurface();
+  const { data: activity, error: activityErr } = useChannelActivity();
+  const { data: compliance, mutate: retryCompliance } = useSecurityLatest();
   const [scanning, setScanning] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
 
-  async function runScan() {
-    setScanning(true);
-    try {
-      await fetch("/api/security/scan");
-      await mutate();
-      setToast("Scan complete");
-    } catch {
-      setToast("Scan failed");
-    } finally {
-      setScanning(false);
-      setTimeout(() => setToast(null), 3000);
-    }
-  }
-
-  if (error) return <ErrorState message="Failed to load security data" onRetry={() => mutate()} />;
-  if (latest === undefined) return <PageSkeleton />;
+  if (surfaceErr) return <ErrorState message="Failed to load security data" onRetry={() => retrySurface()} />;
+  if (!surface) return <PageSkeleton />;
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-8 max-w-3xl">
       <PageHeader
         title="Security"
-        description="How well is your OpenClaw instance locked down?"
+        description="Who has access, what's flowing through, and is the system configured safely?"
       />
 
-      {/* Scan button + toast */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={runScan}
-          disabled={scanning}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 transition-colors"
-        >
-          <RefreshCw className={cn("w-3.5 h-3.5", scanning && "animate-spin")} />
-          {scanning ? "Scanning..." : "Run Scan"}
-        </button>
-        {toast && (
-          <span className="text-xs text-ink-muted animate-in fade-in">{toast}</span>
+      {/* Section 1: Access Surface */}
+      <AccessSurfaceSection surface={surface} />
+
+      {/* Section 2: Activity */}
+      {activity && <ActivitySection channels={activity.byChannel} surface={surface} />}
+      {activityErr && <p className="text-xs text-error">Failed to load activity data</p>}
+
+      {/* Section 3: Config Health */}
+      <ConfigHealthSection
+        compliance={compliance ?? undefined}
+        scanning={scanning}
+        onScan={async () => {
+          setScanning(true);
+          try { await fetch("/api/security/scan"); await retryCompliance(); } catch {} finally { setScanning(false); }
+        }}
+      />
+    </div>
+  );
+}
+
+// =============================================================================
+// Section 1: Access Surface
+// =============================================================================
+
+function AccessSurfaceSection({ surface }: { surface: import("@/lib/api").AccessSurface }) {
+  return (
+    <section>
+      <SectionHeader icon={<Globe className="w-4 h-4" />} title="Access Surface" subtitle="What doors are open into this system?" />
+
+      {/* Channels */}
+      <div className="bg-card rounded-xl border border-border divide-y divide-border/40 mb-4">
+        {surface.channels.map((ch) => (
+          <ChannelRow key={ch.name} channel={ch} />
+        ))}
+        {surface.channels.length === 0 && (
+          <div className="px-4 py-6 text-sm text-ink-muted text-center">No channels configured</div>
         )}
       </div>
 
-      {latest === null ? (
-        <div className="bg-card rounded-xl border border-border p-8 text-center">
-          <ShieldAlert className="w-8 h-8 text-ink-faint mx-auto mb-3" />
-          <p className="text-sm text-ink-muted">No scan yet. Click "Run Scan" to check your setup.</p>
-        </div>
-      ) : (
-        <>
-          {/* Score */}
-          <ScoreHeader report={latest} />
-
-          {/* Checklist */}
-          <div className="bg-card rounded-xl border border-border divide-y divide-border/40">
-            <ChecklistRow
-              label="Exec security"
-              sublabel="Can agents run commands safely?"
-              category={latest.breakdown.execPosture}
-            />
-            <ChecklistRow
-              label="Secret exposure"
-              sublabel="Any API keys leaked in tool outputs?"
-              category={latest.breakdown.credentialExposure}
-            />
-            <ChecklistRow
-              label="Skill files"
-              sublabel="Have installed skills been tampered with?"
-              category={latest.breakdown.skillIntegrity}
-            />
-            <ChecklistRow
-              label="Auth profiles"
-              sublabel="Are API keys configured and valid?"
-              category={latest.breakdown.authHealth}
-            />
+      {/* Webhooks */}
+      {surface.webhooks.length > 0 && (
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Webhook className="w-3.5 h-3.5 text-ink-faint" />
+            <span className="text-xs font-semibold text-ink-faint uppercase tracking-wider">
+              Webhook Endpoints
+            </span>
+            {!surface.hooksEnabled && <Badge variant="muted">disabled</Badge>}
           </div>
+          <div className="bg-card rounded-xl border border-border divide-y divide-border/40">
+            {surface.webhooks.map((wh) => (
+              <WebhookRow key={wh.path} webhook={wh} />
+            ))}
+          </div>
+        </div>
+      )}
 
-          {/* Findings — only show if there are problems */}
-          {latest.breakdown.credentialExposure.findings.length > 0 && (
-            <FindingsSection findings={latest.breakdown.credentialExposure.findings} />
+      {/* Gateway summary */}
+      <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-faint">
+        <span>Gateway bind: <strong className="text-ink-muted">{surface.gateway.bind}</strong></span>
+        <span>Auth: <strong className="text-ink-muted">{surface.gateway.authMode}</strong></span>
+        <span>Tailscale: <strong className="text-ink-muted">{surface.gateway.tailscale ? "yes" : "no"}</strong></span>
+        <span>Exec: <strong className="text-ink-muted">{surface.execSecurity}</strong></span>
+        <span>Agents: <strong className="text-ink-muted">{surface.agentCount}</strong></span>
+        <span>Bindings: <strong className="text-ink-muted">{surface.totalBindings}</strong></span>
+      </div>
+    </section>
+  );
+}
+
+function ChannelRow({ channel }: { channel: AccessChannel }) {
+  const [expanded, setExpanded] = useState(false);
+  const riskColor = channel.risk === "high" ? "text-error" : channel.risk === "medium" ? "text-warning" : "text-healthy";
+  const riskBg = channel.risk === "high" ? "bg-error/8" : "";
+
+  return (
+    <div className={riskBg}>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-3 w-full px-4 py-3 text-left hover:bg-cream-dark/30 transition-colors"
+      >
+        {expanded ? <ChevronDown className="w-3.5 h-3.5 text-ink-faint shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-ink-faint shrink-0" />}
+
+        <span className="text-sm font-medium text-ink capitalize">{channel.name}</span>
+
+        {!channel.enabled && <Badge variant="muted">disabled</Badge>}
+        {channel.enabled && (
+          <span className={cn("text-xs font-medium", riskColor)}>
+            {channel.risk} risk
+          </span>
+        )}
+
+        <span className="ml-auto text-xs text-ink-faint">
+          DM: <strong className={cn(channel.dmPolicy === "open" ? "text-error" : "text-ink-muted")}>{channel.dmPolicy}</strong>
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="px-4 pb-3 ml-7 space-y-1.5 text-xs text-ink-muted">
+          <div>
+            <strong>DM policy:</strong> {channel.dmPolicy}
+            {channel.dmPolicy === "open" && <span className="text-error ml-1">— anyone can message the agent</span>}
+            {channel.dmPolicy === "allowlist" && channel.allowedUsers != null && <span> ({channel.allowedUsers} allowed user{channel.allowedUsers !== 1 ? "s" : ""})</span>}
+            {channel.dmPolicy === "pairing" && <span className="text-warning ml-1">— requires approval, but anyone can request</span>}
+          </div>
+          <div><strong>Group policy:</strong> {channel.groupPolicy}</div>
+          {channel.boundAgents.length > 0 && (
+            <div><strong>Bound agents:</strong> {channel.boundAgents.join(", ")}</div>
           )}
-
-          {/* Skill drift — only show if there are changes */}
-          <SkillDriftSection drift={latest.breakdown.skillIntegrity} />
-
-          {/* History sparkline */}
-          {history && history.items.length > 1 && (
-            <HistoryStrip items={history.items} />
+          {channel.boundAgents.length === 0 && (
+            <div><strong>Bound agents:</strong> none (uses default agent)</div>
           )}
-        </>
+        </div>
       )}
     </div>
   );
 }
 
-function ScoreHeader({ report }: { report: SecurityComplianceReport }) {
-  const good = report.score >= 80;
-  const Icon = good ? ShieldCheck : ShieldAlert;
-
+function WebhookRow({ webhook }: { webhook: AccessWebhook }) {
   return (
-    <div className={cn(
-      "flex items-center gap-5 rounded-xl border p-5",
-      good ? "bg-healthy/5 border-healthy/20" : "bg-error/5 border-error/20",
-    )}>
-      <Icon className={cn("w-10 h-10 shrink-0", good ? "text-healthy" : "text-error")} />
-      <div>
-        <div className="flex items-baseline gap-2">
-          <span className={cn("text-3xl font-bold tabular-nums", good ? "text-healthy" : "text-error")}>
-            {report.score}
-          </span>
-          <span className="text-sm text-ink-muted">/100</span>
-        </div>
-        <p className="text-xs text-ink-faint mt-0.5">
-          {good
-            ? "Your instance is well configured."
-            : "Some settings need attention."}
-          {" "}Scanned {formatRelativeTime(report.scannedAt)}.
-        </p>
-      </div>
+    <div className="flex items-center gap-3 px-4 py-2.5">
+      <span className="text-sm font-mono text-ink-muted">{webhook.path}</span>
+      <span className="text-xs text-ink-faint">{webhook.name}</span>
+      {webhook.transform && <span className="text-xs font-mono text-ink-faint">{webhook.transform}</span>}
+      <span className="ml-auto">
+        {webhook.hasToken
+          ? <span className="text-xs text-healthy">token-protected</span>
+          : <span className="text-xs text-error">no auth</span>}
+      </span>
     </div>
   );
 }
 
-function ChecklistRow({
-  label,
-  sublabel,
-  category,
+// =============================================================================
+// Section 2: Activity
+// =============================================================================
+
+function ActivitySection({ channels, surface }: { channels: ChannelActivity[]; surface: import("@/lib/api").AccessSurface }) {
+  if (channels.length === 0) return null;
+
+  // Build a risk lookup from access surface
+  const riskMap = new Map(surface.channels.map((c) => [c.name, c.risk]));
+
+  return (
+    <section>
+      <SectionHeader icon={<Activity className="w-4 h-4" />} title="Activity" subtitle="What's flowing through those doors?" />
+
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className="grid grid-cols-[1fr_70px_70px_70px_70px_100px] gap-2 px-4 py-2 border-b border-border text-[10px] uppercase tracking-wider text-ink-faint">
+          <span>Channel</span>
+          <span className="text-right">Sessions</span>
+          <span className="text-right">Messages</span>
+          <span className="text-right">Tools</span>
+          <span className="text-right">Agents</span>
+          <span className="text-right">Last active</span>
+        </div>
+
+        {channels.map((ch) => {
+          const risk = riskMap.get(ch.channel);
+          const isHighRiskActive = risk === "high" && ch.sessions24h > 0;
+          const inactive = ch.sessions7d === 0;
+
+          return (
+            <ActivityRow key={ch.channel} channel={ch} highlighted={isHighRiskActive} dimmed={inactive} />
+          );
+        })}
+      </div>
+
+      <p className="text-[11px] text-ink-faint mt-2">Showing last 24 hours. Parentheses show 7-day totals.</p>
+    </section>
+  );
+}
+
+function ActivityRow({ channel, highlighted, dimmed }: { channel: ChannelActivity; highlighted: boolean; dimmed: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className={cn(
+          "grid grid-cols-[1fr_70px_70px_70px_70px_100px] gap-2 px-4 py-2.5 w-full text-left border-b border-border/40 last:border-b-0 transition-colors hover:bg-cream-dark/30",
+          highlighted && "bg-error/5",
+          dimmed && "opacity-40",
+        )}
+      >
+        <span className="flex items-center gap-2">
+          <span className="text-sm font-medium text-ink capitalize">{channel.channel}</span>
+          {highlighted && <span className="text-[10px] text-error font-medium">open + active</span>}
+        </span>
+        <span className="text-xs text-ink-muted text-right tabular-nums">
+          {channel.sessions24h} <span className="text-ink-faint">({channel.sessions7d})</span>
+        </span>
+        <span className="text-xs text-ink-muted text-right tabular-nums">
+          {formatNumber(channel.messages24h)} <span className="text-ink-faint">({formatNumber(channel.messages7d)})</span>
+        </span>
+        <span className="text-xs text-ink-muted text-right tabular-nums">
+          {formatNumber(channel.toolCalls24h)} <span className="text-ink-faint">({formatNumber(channel.toolCalls7d)})</span>
+        </span>
+        <span className="text-xs text-ink-muted text-right tabular-nums">
+          {channel.uniqueSenders24h}
+        </span>
+        <span className="text-xs text-ink-faint text-right">
+          {channel.lastActivity ? formatRelativeTime(channel.lastActivity) : "never"}
+        </span>
+      </button>
+      {expanded && channel.topTools.length > 0 && (
+        <div className="px-4 pb-2 border-b border-border/40 text-xs text-ink-faint">
+          Top tools: {channel.topTools.join(", ")}
+        </div>
+      )}
+    </>
+  );
+}
+
+// =============================================================================
+// Section 3: Config Health
+// =============================================================================
+
+function ConfigHealthSection({
+  compliance,
+  scanning,
+  onScan,
 }: {
-  label: string;
-  sublabel: string;
-  category: SecurityCategoryScore;
+  compliance?: SecurityComplianceReport;
+  scanning: boolean;
+  onScan: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <section>
+      <SectionHeader icon={<Server className="w-4 h-4" />} title="Config Health" subtitle="Is the system configured safely?" />
+
+      <div className="bg-card rounded-xl border border-border">
+        {/* Summary bar */}
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex items-center gap-3 w-full px-4 py-3 text-left hover:bg-cream-dark/30 transition-colors"
+        >
+          {expanded ? <ChevronDown className="w-3.5 h-3.5 text-ink-faint" /> : <ChevronRight className="w-3.5 h-3.5 text-ink-faint" />}
+
+          {compliance ? (
+            <>
+              {compliance.score >= 80
+                ? <ShieldCheck className="w-4 h-4 text-healthy" />
+                : <ShieldAlert className="w-4 h-4 text-error" />}
+              <span className={cn("text-sm font-bold tabular-nums", compliance.score >= 80 ? "text-healthy" : compliance.score >= 50 ? "text-warning" : "text-error")}>
+                {compliance.score}/100
+              </span>
+              <span className="text-xs text-ink-faint">
+                Scanned {formatRelativeTime(compliance.scannedAt)}
+              </span>
+            </>
+          ) : (
+            <span className="text-sm text-ink-muted">No scan run yet</span>
+          )}
+
+          <button
+            onClick={(e) => { e.stopPropagation(); onScan(); }}
+            disabled={scanning}
+            className="ml-auto flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-cream-dark/60 text-ink-muted rounded-md hover:bg-cream-dark transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={cn("w-3 h-3", scanning && "animate-spin")} />
+            {scanning ? "Scanning" : "Scan"}
+          </button>
+        </button>
+
+        {/* Expanded checklist */}
+        {expanded && compliance && (
+          <div className="border-t border-border/40 divide-y divide-border/40">
+            <ChecklistItem label="Exec security" sublabel="Can agents run commands safely?" category={compliance.breakdown.execPosture} />
+            <ChecklistItem label="Secret exposure" sublabel="API keys leaked in tool outputs?" category={compliance.breakdown.credentialExposure} />
+            <ChecklistItem label="Skill files" sublabel="Have installed skills been tampered with?" category={compliance.breakdown.skillIntegrity} />
+            <ChecklistItem label="Auth profiles" sublabel="API keys configured and valid?" category={compliance.breakdown.authHealth} />
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ChecklistItem({ label, sublabel, category }: { label: string; sublabel: string; category: SecurityCategoryScore }) {
   const pct = (category.score / category.max) * 100;
   const perfect = pct === 100;
   const bad = pct < 50;
-
   const StatusIcon = perfect ? Check : bad ? X : Minus;
-  const statusColor = perfect ? "text-healthy" : bad ? "text-error" : "text-warning";
+  const color = perfect ? "text-healthy" : bad ? "text-error" : "text-warning";
 
   return (
-    <div className="px-4 py-3">
+    <div className="px-4 py-2.5">
       <div className="flex items-center gap-3">
-        <StatusIcon className={cn("w-4 h-4 shrink-0", statusColor)} />
-        <div className="flex-1 min-w-0">
-          <span className="text-sm font-medium text-ink">{label}</span>
-          <span className="text-xs text-ink-faint ml-2">{sublabel}</span>
-        </div>
-        <span className={cn("text-xs font-bold tabular-nums", statusColor)}>
-          {category.score}/{category.max}
-        </span>
+        <StatusIcon className={cn("w-3.5 h-3.5 shrink-0", color)} />
+        <span className="text-sm text-ink">{label}</span>
+        <span className="text-xs text-ink-faint">{sublabel}</span>
+        <span className={cn("ml-auto text-xs font-bold tabular-nums", color)}>{category.score}/{category.max}</span>
       </div>
-      {/* Show details only when not perfect */}
       {!perfect && category.details.length > 0 && (
-        <div className="mt-2 ml-7 space-y-0.5">
+        <div className="mt-1.5 ml-6 space-y-0.5">
           {category.details.map((d, i) => (
             <p key={i} className="text-xs text-ink-muted">{d}</p>
           ))}
@@ -187,72 +354,16 @@ function ChecklistRow({
   );
 }
 
-function FindingsSection({ findings }: { findings: SecurityCredentialCategory["findings"] }) {
-  return (
-    <div className="bg-error/5 rounded-xl border border-error/20 p-4">
-      <h3 className="text-sm font-semibold text-error flex items-center gap-2 mb-2">
-        <AlertTriangle className="w-3.5 h-3.5" />
-        Secrets found in tool outputs ({findings.length})
-      </h3>
-      <p className="text-xs text-ink-muted mb-3">
-        These patterns were detected in recent tool call outputs. They may be real credentials that agents are exposing.
-      </p>
-      <div className="space-y-1">
-        {findings.slice(0, 10).map((f, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs">
-            <span className="font-mono text-error shrink-0">{f.label}</span>
-            <span className="font-mono text-ink-faint truncate">{f.snippet}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+// =============================================================================
+// Shared
+// =============================================================================
 
-function SkillDriftSection({ drift }: { drift: SecuritySkillDriftCategory }) {
-  const hasChanges = drift.added.length > 0 || drift.removed.length > 0 || drift.modified.length > 0;
-  if (!hasChanges) return null;
-
+function SectionHeader({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
   return (
-    <div className="bg-warning/5 rounded-xl border border-warning/20 p-4">
-      <h3 className="text-sm font-semibold text-warning mb-2">
-        Skill files changed since baseline
-      </h3>
-      <p className="text-xs text-ink-muted mb-3">
-        These skill files differ from the last saved snapshot. This could mean a skill was updated, or something was modified unexpectedly.
-      </p>
-      <div className="space-y-1">
-        {drift.added.map((f) => (
-          <div key={f} className="text-xs"><span className="text-healthy font-medium">added</span> <span className="font-mono text-ink-muted">{f}</span></div>
-        ))}
-        {drift.modified.map((f) => (
-          <div key={f} className="text-xs"><span className="text-warning font-medium">changed</span> <span className="font-mono text-ink-muted">{f}</span></div>
-        ))}
-        {drift.removed.map((f) => (
-          <div key={f} className="text-xs"><span className="text-error font-medium">removed</span> <span className="font-mono text-ink-muted">{f}</span></div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function HistoryStrip({ items }: { items: Array<{ id: number; score: number; scanned_at: string }> }) {
-  return (
-    <div>
-      <h3 className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider mb-2">Recent scans</h3>
-      <div className="flex items-end gap-1 h-8">
-        {items.slice(0, 30).reverse().map((item) => {
-          const color = item.score >= 80 ? "bg-healthy" : item.score >= 50 ? "bg-warning" : "bg-error";
-          return (
-            <div
-              key={item.id}
-              className={cn("flex-1 rounded-sm min-w-1 transition-all", color)}
-              style={{ height: `${Math.max(10, item.score)}%` }}
-              title={`${item.score}/100 — ${formatRelativeTime(item.scanned_at)}`}
-            />
-          );
-        })}
-      </div>
+    <div className="flex items-center gap-2 mb-3">
+      <span className="text-ink-faint">{icon}</span>
+      <h2 className="text-sm font-semibold text-ink">{title}</h2>
+      <span className="text-xs text-ink-faint">— {subtitle}</span>
     </div>
   );
 }

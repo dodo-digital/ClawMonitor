@@ -612,6 +612,61 @@ export function useSecurityHistory() {
   return useApi<{ items: SecurityHistoryItem[] }>("/api/security/history", { refreshInterval: 60_000 });
 }
 
+// --- Access Surface ---
+
+export type AccessChannel = {
+  name: string;
+  enabled: boolean;
+  dmPolicy: string;
+  groupPolicy: string;
+  allowedUsers: number | null;
+  boundAgents: string[];
+  risk: "low" | "medium" | "high";
+};
+
+export type AccessWebhook = {
+  path: string;
+  name: string;
+  transform: string | null;
+  hasToken: boolean;
+};
+
+export type AccessSurface = {
+  channels: AccessChannel[];
+  webhooks: AccessWebhook[];
+  hooksEnabled: boolean;
+  gateway: {
+    bind: string;
+    authMode: string;
+    tailscale: boolean;
+    trustedProxies: number;
+  };
+  execSecurity: string;
+  agentCount: number;
+  totalBindings: number;
+};
+
+export type ChannelActivity = {
+  channel: string;
+  sessions24h: number;
+  messages24h: number;
+  toolCalls24h: number;
+  sessions7d: number;
+  messages7d: number;
+  toolCalls7d: number;
+  lastActivity: string | null;
+  uniqueSenders24h: number;
+  topTools: string[];
+};
+
+export function useAccessSurface() {
+  return useApi<AccessSurface>("/api/security/access-surface", { refreshInterval: 60_000 });
+}
+
+export function useChannelActivity() {
+  return useApi<{ byChannel: ChannelActivity[] }>("/api/security/activity", { refreshInterval: 30_000 });
+}
+
 // --- Heal ---
 
 export type HealResult = {
