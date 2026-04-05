@@ -32,7 +32,7 @@ chatRouter.post(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: model ?? "openclaw/acp-claude",
+        model: model ?? "openclaw/acp-clawmonitor",
         messages,
         stream: stream ?? true,
       }),

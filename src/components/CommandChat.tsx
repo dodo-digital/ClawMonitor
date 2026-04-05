@@ -189,7 +189,7 @@ export function CommandChat() {
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/60">
               <MessageSquare className="w-3.5 h-3.5 text-accent" />
               <span className="text-xs font-medium text-ink">Ask OpenClaw</span>
-              <span className="text-[10px] text-ink-faint">acp-claude</span>
+              <span className="text-[10px] text-ink-faint">acp-clawmonitor</span>
               {turnCount > 0 && (
                 <span className="text-[10px] text-ink-faint bg-cream-dark/60 px-1.5 py-0.5 rounded">
                   {turnCount} turn{turnCount !== 1 ? "s" : ""}
