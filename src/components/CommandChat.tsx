@@ -171,11 +171,11 @@ export function CommandChat() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-4 right-4 z-40 flex items-center gap-2 px-3 py-1.5 bg-card border border-border rounded-full shadow-lg text-xs text-ink-muted hover:text-ink hover:border-accent/40 transition-all"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-3 bg-card border border-border rounded-full shadow-lg text-sm text-ink-muted hover:text-ink hover:border-accent/40 transition-all"
         >
-          <MessageSquare className="w-3 h-3" />
+          <MessageSquare className="w-4 h-4" />
           <span>Ask OpenClaw</span>
-          <kbd className="text-[10px] bg-cream-dark/80 px-1.5 py-0.5 rounded font-mono text-ink-faint">⌘K</kbd>
+          <kbd className="text-xs bg-cream-dark/80 px-2 py-0.5 rounded font-mono text-ink-faint">⌘K</kbd>
         </button>
       )}
 
