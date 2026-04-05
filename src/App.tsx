@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router";
+import { CommandChat } from "@/components/CommandChat";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { Dashboard } from "@/pages/Dashboard";
@@ -30,6 +31,7 @@ export function App() {
   return (
     <div className="flex min-h-screen">
       <Sidebar />
+      <CommandChat />
       <div className="flex-1 flex flex-col min-w-0">
         <Topbar />
         <main className="flex-1 p-5">

@@ -623,7 +623,6 @@ export type AccessChannel = {
   boundAgents: string[];
   risk: "low" | "medium" | "high";
   explanation: string;
-  suggestion: string;
 };
 
 export type AccessWebhook = {

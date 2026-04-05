@@ -25,7 +25,6 @@ import {
   X,
   Minus,
   RefreshCw,
-  Lock,
 } from "lucide-react";
 
 export function Security() {
@@ -253,34 +252,33 @@ function ChannelRow({ channel, onPolicyChanged }: { channel: AccessChannel; onPo
           {/* Explanation */}
           <p className="text-xs text-ink-muted leading-relaxed">{channel.explanation}</p>
 
-          {/* Suggestion + action buttons */}
-          {channel.suggestion && (
+          {/* Policy picker — always visible for enabled channels */}
+          {channel.enabled && (
             <div className="bg-cream-dark/40 rounded-lg px-3 py-2.5">
-              <p className="text-xs text-ink-muted mb-2">{channel.suggestion}</p>
-              <div className="flex items-center gap-2 flex-wrap">
-                {channel.dmPolicy !== "allowlist" && (
-                  <PolicyButton
-                    label="Switch to allowlist"
-                    onClick={() => changePolicy("allowlist")}
-                    disabled={changing}
-                  />
-                )}
-                {channel.dmPolicy !== "pairing" && channel.dmPolicy !== "allowlist" && (
-                  <PolicyButton
-                    label="Switch to pairing"
-                    onClick={() => changePolicy("pairing")}
-                    disabled={changing}
-                  />
-                )}
-                {channel.dmPolicy !== "closed" && (
-                  <PolicyButton
-                    label="Disable DMs"
-                    onClick={() => changePolicy("closed")}
-                    disabled={changing}
-                    variant="muted"
-                  />
-                )}
+              <p className="text-[11px] text-ink-faint mb-2">DM policy</p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {(["allowlist", "pairing", "open", "closed"] as const).map((policy) => (
+                  <button
+                    key={policy}
+                    onClick={(e) => { e.stopPropagation(); changePolicy(policy); }}
+                    disabled={changing || channel.dmPolicy === policy}
+                    className={cn(
+                      "px-2.5 py-1 text-xs rounded-md transition-colors disabled:opacity-50",
+                      channel.dmPolicy === policy
+                        ? "bg-accent text-white font-medium"
+                        : "bg-card border border-border text-ink-muted hover:bg-cream-dark/60",
+                    )}
+                  >
+                    {policy === "allowlist" ? "Allowlist" : policy === "pairing" ? "Pairing" : policy === "open" ? "Open" : "Closed"}
+                  </button>
+                ))}
               </div>
+              <p className="text-[11px] text-ink-faint mt-1.5">
+                {channel.dmPolicy === "allowlist" && "Only pre-approved users. Most restrictive."}
+                {channel.dmPolicy === "pairing" && "Anyone can request, you approve. Moderate."}
+                {channel.dmPolicy === "open" && "Anyone can message. Least restrictive."}
+                {channel.dmPolicy === "closed" && "No DMs. Agent only works in groups."}
+              </p>
             </div>
           )}
 
@@ -297,29 +295,6 @@ function ChannelRow({ channel, onPolicyChanged }: { channel: AccessChannel; onPo
         </div>
       )}
     </div>
-  );
-}
-
-function PolicyButton({ label, onClick, disabled, variant }: {
-  label: string;
-  onClick: () => void;
-  disabled: boolean;
-  variant?: "muted";
-}) {
-  return (
-    <button
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      disabled={disabled}
-      className={cn(
-        "flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors disabled:opacity-50",
-        variant === "muted"
-          ? "bg-card border border-border text-ink-muted hover:bg-cream-dark/40"
-          : "bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20",
-      )}
-    >
-      <Lock className="w-3 h-3" />
-      {label}
-    </button>
   );
 }
 

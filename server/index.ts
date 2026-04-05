@@ -20,6 +20,7 @@ import { TelegramDestination } from "./monitor/notifications/telegram.js";
 import { WebhookDestination } from "./monitor/notifications/webhook.js";
 import { MonitorScheduler } from "./monitor/scheduler.js";
 import { agentsRouter } from "./routes/agents.js";
+import { chatRouter } from "./routes/chat.js";
 import { healRouter } from "./routes/heal.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { bootstrapRouter } from "./routes/bootstrap.js";
@@ -73,6 +74,7 @@ export function createApp(): Express {
   app.use("/api/monitor", monitorRouter);
   app.use("/api/security", securityRouter);
   app.use("/api/system/heal", healRouter);
+  app.use("/api/chat", chatRouter);
 
   if (fs.existsSync(DIST_DIR)) {
     app.use(express.static(DIST_DIR));

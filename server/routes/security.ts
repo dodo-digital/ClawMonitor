@@ -61,17 +61,14 @@ securityRouter.get(
 
         // Build human-readable explanation
         let explanation = "";
-        let suggestion = "";
         if (!enabled) {
           explanation = "This channel is disabled. No one can reach the agent through it.";
         } else if (dmPolicy === "open") {
           explanation = `Anyone ${name === "slack" ? "in your Slack workspace" : `on ${name}`} can message the agent directly. The agent has exec access, meaning it can run commands on this server on behalf of anyone who messages it.`;
-          suggestion = 'Switch to "allowlist" to restrict who can message the agent, or "pairing" to require your approval for each new sender.';
         } else if (dmPolicy === "allowlist") {
-          explanation = `Only ${allowedUsers ?? "approved"} user${(allowedUsers ?? 0) !== 1 ? "s" : ""} can message the agent. Others are ignored.`;
+          explanation = `Only ${allowedUsers ?? "approved"} user${(allowedUsers ?? 0) !== 1 ? "s" : ""} can message the agent. Others are ignored. This is the most restrictive policy.`;
         } else if (dmPolicy === "pairing") {
-          explanation = "Anyone can request to message the agent, but you must approve each new sender before they can interact.";
-          suggestion = 'For tighter control, switch to "allowlist" to pre-approve specific users only.';
+          explanation = "Anyone can request to message the agent, but you must approve each new sender before they can interact. Approved users are remembered.";
         } else if (dmPolicy === "closed") {
           explanation = "DMs are disabled for this channel. The agent only operates in groups.";
         }
@@ -85,7 +82,6 @@ securityRouter.get(
           boundAgents,
           risk: enabled ? assessDmRisk(dmPolicy) : ("low" as ChannelRisk),
           explanation,
-          suggestion,
         };
       });
 
