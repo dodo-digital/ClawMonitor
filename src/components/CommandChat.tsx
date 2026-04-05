@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router";
 import { cn } from "@/lib/utils";
-import { MessageSquare, Send, X, Loader2 } from "lucide-react";
+import { MessageSquare, Send, X, Loader2, RotateCcw } from "lucide-react";
 
 type Message = {
   role: "user" | "assistant";
@@ -20,11 +20,21 @@ const PAGE_CONTEXT: Record<string, string> = {
   "/activity": "the Activity page (sessions and live feed)",
 };
 
+const SYSTEM_PROMPT = `You are an OpenClaw operations assistant embedded in the ClawMonitor dashboard. You have full access to the OpenClaw CLI and can run commands on the host.
+
+Rules:
+- Be direct and concise. No preamble.
+- When the user asks you to do something, do it. Don't ask for confirmation or present numbered menus — just act.
+- If you need to run a command, run it. Show what you did and what happened.
+- If something could be destructive (like restarting the gateway), warn once briefly then proceed if they confirm.
+- Keep responses short. Use markdown for structure when helpful.`;
+
 export function CommandChat() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [turnCount, setTurnCount] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -57,6 +67,11 @@ export function CommandChat() {
     }
   }, [messages]);
 
+  function clearChat() {
+    setMessages([]);
+    setTurnCount(0);
+  }
+
   const send = useCallback(async () => {
     const text = input.trim();
     if (!text || streaming) return;
@@ -65,12 +80,12 @@ export function CommandChat() {
     const userMsg: Message = { role: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
     setStreaming(true);
+    setTurnCount((c) => c + 1);
 
-    // Build context-aware system message
     const pageCtx = PAGE_CONTEXT[location.pathname] ?? `page: ${location.pathname}`;
     const systemMsg = {
       role: "system" as const,
-      content: `You are an OpenClaw assistant embedded in the ClawMonitor dashboard. The user is currently viewing ${pageCtx}. Help them understand what they're seeing and take actions on their OpenClaw instance. Be concise.`,
+      content: `${SYSTEM_PROMPT}\n\nThe user is currently viewing ${pageCtx}.`,
     };
 
     const apiMessages = [
@@ -132,7 +147,7 @@ export function CommandChat() {
               });
             }
           } catch {
-            // skip parse errors
+            // skip
           }
         }
       }
@@ -150,72 +165,105 @@ export function CommandChat() {
     }
   }, [input, streaming, messages, location.pathname]);
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh]">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
+    <>
+      {/* Cmd+K pill — always visible at bottom right */}
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          className="fixed bottom-4 right-4 z-40 flex items-center gap-2 px-3 py-1.5 bg-card border border-border rounded-full shadow-lg text-xs text-ink-muted hover:text-ink hover:border-accent/40 transition-all"
+        >
+          <MessageSquare className="w-3 h-3" />
+          <span>Ask OpenClaw</span>
+          <kbd className="text-[10px] bg-cream-dark/80 px-1.5 py-0.5 rounded font-mono text-ink-faint">⌘K</kbd>
+        </button>
+      )}
 
-      {/* Panel */}
-      <div className="relative w-full max-w-xl bg-card border border-border rounded-xl shadow-2xl flex flex-col max-h-[70vh]">
-        {/* Header */}
-        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/60">
-          <MessageSquare className="w-3.5 h-3.5 text-accent" />
-          <span className="text-xs font-medium text-ink">Ask OpenClaw</span>
-          <span className="text-[10px] text-ink-faint ml-1">via acp-claude</span>
-          <button onClick={() => setOpen(false)} className="ml-auto text-ink-faint hover:text-ink transition-colors">
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
+      {/* Chat overlay */}
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh]">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
 
-        {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-[100px]">
-          {messages.length === 0 && (
-            <p className="text-xs text-ink-faint text-center py-4">
-              Ask anything about your OpenClaw instance. The agent has context about this page and can take actions.
-            </p>
-          )}
-          {messages.map((msg, i) => (
-            <div key={i} className={cn("text-sm", msg.role === "user" ? "text-right" : "")}>
-              {msg.role === "user" ? (
-                <span className="inline-block bg-accent/10 text-ink px-3 py-1.5 rounded-lg text-xs">
-                  {msg.content}
+          <div className="relative w-full max-w-xl bg-card border border-border rounded-xl shadow-2xl flex flex-col max-h-[70vh]">
+            {/* Header */}
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/60">
+              <MessageSquare className="w-3.5 h-3.5 text-accent" />
+              <span className="text-xs font-medium text-ink">Ask OpenClaw</span>
+              <span className="text-[10px] text-ink-faint">acp-claude</span>
+              {turnCount > 0 && (
+                <span className="text-[10px] text-ink-faint bg-cream-dark/60 px-1.5 py-0.5 rounded">
+                  {turnCount} turn{turnCount !== 1 ? "s" : ""}
                 </span>
-              ) : (
-                <div className="text-xs text-ink-muted leading-relaxed whitespace-pre-wrap">
-                  {msg.content || (streaming && i === messages.length - 1 && (
-                    <Loader2 className="w-3 h-3 animate-spin text-ink-faint inline" />
-                  ))}
+              )}
+              <div className="ml-auto flex items-center gap-1">
+                {messages.length > 0 && (
+                  <button onClick={clearChat} className="text-ink-faint hover:text-ink transition-colors p-1" title="New conversation">
+                    <RotateCcw className="w-3 h-3" />
+                  </button>
+                )}
+                <button onClick={() => setOpen(false)} className="text-ink-faint hover:text-ink transition-colors p-1">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-[120px]">
+              {messages.length === 0 && (
+                <div className="text-center py-6 space-y-2">
+                  <p className="text-xs text-ink-faint">Ask anything about your OpenClaw instance.</p>
+                  <div className="flex flex-wrap justify-center gap-1.5">
+                    {["What's the system status?", "Harden my Slack config", "Why is this cron job failing?"].map((q) => (
+                      <button
+                        key={q}
+                        onClick={() => { setInput(q); setTimeout(() => inputRef.current?.focus(), 0); }}
+                        className="text-[11px] px-2 py-1 rounded-md bg-cream-dark/50 text-ink-muted hover:bg-cream-dark hover:text-ink transition-colors"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
+              {messages.map((msg, i) => (
+                <div key={i} className={cn(msg.role === "user" ? "text-right" : "")}>
+                  {msg.role === "user" ? (
+                    <span className="inline-block bg-accent/10 text-ink px-3 py-1.5 rounded-lg text-xs max-w-[85%] text-left">
+                      {msg.content}
+                    </span>
+                  ) : (
+                    <div className="text-xs text-ink-muted leading-relaxed whitespace-pre-wrap">
+                      {msg.content || (streaming && i === messages.length - 1 && (
+                        <Loader2 className="w-3 h-3 animate-spin text-ink-faint inline" />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        {/* Input */}
-        <div className="border-t border-border/60 px-3 py-2 flex items-center gap-2">
-          <input
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-            placeholder="Ask something..."
-            disabled={streaming}
-            className="flex-1 bg-transparent text-sm text-ink placeholder:text-ink-faint outline-none disabled:opacity-50"
-          />
-          <button
-            onClick={send}
-            disabled={streaming || !input.trim()}
-            className="text-ink-faint hover:text-accent transition-colors disabled:opacity-30"
-          >
-            <Send className="w-3.5 h-3.5" />
-          </button>
-          <span className="text-[10px] text-ink-faint/50 ml-1">
-            {streaming ? "streaming..." : "⌘K"}
-          </span>
+            {/* Input */}
+            <div className="border-t border-border/60 px-3 py-2.5 flex items-center gap-2">
+              <input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+                placeholder="Ask something..."
+                disabled={streaming}
+                className="flex-1 bg-transparent text-sm text-ink placeholder:text-ink-faint outline-none disabled:opacity-50"
+              />
+              <button
+                onClick={send}
+                disabled={streaming || !input.trim()}
+                className="text-ink-faint hover:text-accent transition-colors disabled:opacity-30"
+              >
+                {streaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    </>
   );
 }
