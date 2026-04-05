@@ -31,7 +31,7 @@ const navSections: NavSection[] = [
     label: "Knowledge",
     items: [
       { to: "/skills", icon: Sparkles, label: "Skills" },
-      { to: "/memory", icon: Brain, label: "Memory" },
+      { to: "/memory", icon: Brain, label: "Knowledge Graph" },
     ],
   },
   {

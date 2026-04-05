@@ -42,3 +42,11 @@ export function getBootstrapFilePath(name: string): string {
 export function bootstrapFileExists(name: string): boolean {
   return fs.existsSync(getBootstrapFilePath(name));
 }
+
+export async function getExtraPaths(): Promise<string[]> {
+  const config = await readOpenClawConfig();
+  const defaults = config.agents?.defaults as Record<string, unknown> | undefined;
+  const memorySearch = defaults?.memorySearch as Record<string, unknown> | undefined;
+  const extraPaths = memorySearch?.extraPaths as string[] | undefined;
+  return extraPaths ?? [];
+}

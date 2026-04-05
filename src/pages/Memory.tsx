@@ -7,11 +7,14 @@ import {
   useEntityDetail,
   useActivityFeed,
   useDataSources,
+  useAgentContext,
   apiPost,
   type MemoryFile,
   type LifeTreeNode,
   type FactWithDecay,
   type ActivityFact,
+  type AgentContextFile,
+  type AgentContextFileContent,
 } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { PageSkeleton } from "@/components/ui/skeleton";
@@ -29,9 +32,13 @@ import {
   Layers,
   ArrowLeft,
   FolderOpen,
+  Eye,
+  EyeOff,
+  AlertTriangle,
+  Folder,
 } from "lucide-react";
 
-type Tab = "activity" | "knowledge" | "notes" | "search";
+type Tab = "activity" | "knowledge" | "agent-context" | "notes" | "search";
 
 type SearchResult = {
   path: string;
@@ -42,23 +49,26 @@ type SearchResult = {
 export function Memory() {
   const [tab, setTab] = useState<Tab>("activity");
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: "activity", label: "What's New", icon: <Activity className="w-3.5 h-3.5" /> },
-    { id: "knowledge", label: "Knowledge Graph", icon: <FolderTree className="w-3.5 h-3.5" /> },
-    { id: "notes", label: "Daily Notes", icon: <FileText className="w-3.5 h-3.5" /> },
-    { id: "search", label: "Search", icon: <Search className="w-3.5 h-3.5" /> },
+  const tabs: { id: Tab; label: string; icon: React.ReactNode; desc: string }[] = [
+    { id: "agent-context", label: "Agent Context", icon: <Layers className="w-3.5 h-3.5" />, desc: "Files the agent reads every sweep and can search" },
+    { id: "activity", label: "What's New", icon: <Activity className="w-3.5 h-3.5" />, desc: "Facts the agent has saved about people, companies, and projects" },
+    { id: "knowledge", label: "Entities", icon: <FolderTree className="w-3.5 h-3.5" />, desc: "Browse people, companies, and projects the agent knows about" },
+    { id: "notes", label: "Daily Notes", icon: <FileText className="w-3.5 h-3.5" />, desc: "Session logs the agent writes each day" },
+    { id: "search", label: "Search", icon: <Search className="w-3.5 h-3.5" />, desc: "Semantic search across all indexed knowledge" },
   ];
+
+  const activeTab = tabs.find((t) => t.id === tab);
 
   return (
     <div>
       <PageHeader
         section="06"
-        title="Memory & Knowledge"
-        description="See what the agent is learning and where it saves data"
+        title="Knowledge Graph"
+        description="See what the agent knows, what it can find, and where it saves data"
       />
 
       {/* Tab bar */}
-      <div className="flex items-center gap-1 mb-6 border-b border-border">
+      <div className="flex items-center gap-1 mb-4 border-b border-border">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -76,8 +86,14 @@ export function Memory() {
         ))}
       </div>
 
+      {/* Tab description */}
+      {activeTab && (
+        <p className="text-xs text-ink-muted mb-6">{activeTab.desc}</p>
+      )}
+
       {tab === "activity" && <ActivityTab />}
       {tab === "knowledge" && <KnowledgeGraphTab />}
+      {tab === "agent-context" && <AgentContextTab />}
       {tab === "notes" && <NotesTab />}
       {tab === "search" && <SearchTab />}
     </div>
@@ -642,6 +658,301 @@ function NotesTab() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// =============================================================================
+// Agent Context Tab — extraPaths visibility
+// =============================================================================
+
+const categoryLabels: Record<string, string> = {
+  identity: "Identity",
+  policy: "Policy & Rules",
+  reference: "Reference",
+  contacts: "Contacts",
+  tasks: "Tasks",
+  skill: "Skills",
+  "knowledge-dir": "Knowledge Directories",
+  other: "Other",
+};
+
+const categoryOrder = ["identity", "policy", "contacts", "tasks", "reference", "skill", "knowledge-dir", "other"];
+
+function AgentContextTab() {
+  const { data, error, mutate } = useAgentContext();
+  const [expandedFile, setExpandedFile] = useState<string | null>(null);
+  const [fileContent, setFileContent] = useState<AgentContextFileContent | null>(null);
+  const [fileLoading, setFileLoading] = useState(false);
+  const [showOrphans, setShowOrphans] = useState(false);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
+
+  const grouped = useMemo(() => {
+    if (!data) return new Map<string, AgentContextFile[]>();
+    const map = new Map<string, AgentContextFile[]>();
+    for (const file of data.registered) {
+      if (!map.has(file.category)) map.set(file.category, []);
+      map.get(file.category)!.push(file);
+    }
+    return map;
+  }, [data]);
+
+  async function viewFile(filePath: string) {
+    if (expandedFile === filePath) {
+      setExpandedFile(null);
+      setFileContent(null);
+      return;
+    }
+    setExpandedFile(filePath);
+    setFileLoading(true);
+    try {
+      const res = await fetch(`/api/memory/agent-context/file?path=${encodeURIComponent(filePath)}`);
+      const json = await res.json();
+      setFileContent(json.data ?? null);
+    } catch {
+      setFileContent(null);
+    } finally {
+      setFileLoading(false);
+    }
+  }
+
+  if (error) return <ErrorState message="Failed to load agent context" onRetry={() => mutate()} />;
+  if (!data) return <PageSkeleton />;
+
+  return (
+    <div className="max-w-4xl">
+      {/* How it works — at the top for education */}
+      <div className="mb-6">
+        <button
+          onClick={() => setShowHowItWorks(!showHowItWorks)}
+          className="flex items-center gap-2 mb-2 text-sm font-semibold text-ink hover:text-accent transition-colors"
+        >
+          {showHowItWorks ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+          How Agent Knowledge Works
+        </button>
+        {showHowItWorks && (
+          <div className="bg-card rounded-xl border border-border p-5 text-sm text-ink-muted leading-relaxed space-y-4 mb-4">
+            <div>
+              <p className="font-medium text-ink mb-2">Every sweep, the agent loads knowledge in two tiers:</p>
+              <div className="space-y-3">
+                <div className="bg-cream/50 rounded-lg p-3 border border-border/40">
+                  <p className="font-medium text-ink text-xs uppercase tracking-wider mb-1">Tier 1 — Automatic (every turn)</p>
+                  <p>
+                    Bootstrap files are injected into the system prompt on every turn without the agent doing anything:
+                    AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, HEARTBEAT.md, MEMORY.md.
+                    These consume tokens whether or not the agent needs them.
+                  </p>
+                </div>
+                <div className="bg-cream/50 rounded-lg p-3 border border-border/40">
+                  <p className="font-medium text-ink text-xs uppercase tracking-wider mb-1">Tier 2 — Agent-initiated (on demand)</p>
+                  <p>
+                    Everything else is accessed when the agent decides to read it.
+                    The agent follows HEARTBEAT.md's instructions to read priority-map.md, auto-resolver.md,
+                    contacts.md, and tasks/current.md at the start of each sweep.
+                    Skills tell the agent which files to read when invoked.
+                    The agent can also call <span className="font-mono text-accent">memory_search</span> to
+                    semantically search across all files registered in extraPaths below.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-border/40 pt-3">
+              <p className="font-medium text-ink mb-2">What each tab shows:</p>
+              <ul className="space-y-2">
+                <li>
+                  <strong className="text-ink">Agent Context</strong> (this tab) — the files registered in{" "}
+                  <span className="font-mono text-accent">openclaw.json → extraPaths</span>.
+                  These are what the agent reads explicitly each sweep and what it can find via semantic search.
+                  If a file isn't listed here, the agent won't discover it unless specifically told to read it by path.
+                </li>
+                <li>
+                  <strong className="text-ink">What's New</strong> — facts the agent has extracted and saved about people,
+                  companies, and projects. These are stored in structured JSON files and maintained by nightly extraction scripts.
+                </li>
+                <li>
+                  <strong className="text-ink">Entities</strong> — browse the same data as What's New, organized by
+                  category (people, companies, projects, goals). Click an entity to see all its facts and how recently they were accessed.
+                </li>
+                <li>
+                  <strong className="text-ink">Daily Notes</strong> — markdown summaries of each day's agent sessions, generated
+                  automatically from session transcripts. The agent can search these via <span className="font-mono text-accent">memory_search</span>.
+                </li>
+                <li>
+                  <strong className="text-ink">Search</strong> — semantic search across all indexed knowledge
+                  (extraPaths files, daily notes, session transcripts).
+                </li>
+              </ul>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Stats bar */}
+      <div className="bg-card rounded-xl p-5 border border-border mb-6">
+        <div className="flex items-center gap-6 mb-3">
+          <div className="text-center">
+            <p className="text-lg font-semibold tabular-nums">{data.stats.totalRegistered}</p>
+            <p className="text-[11px] text-ink-faint">Registered</p>
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-semibold tabular-nums text-healthy">{data.stats.totalExisting}</p>
+            <p className="text-[11px] text-ink-faint">Existing</p>
+          </div>
+          {data.stats.totalMissing > 0 && (
+            <div className="text-center">
+              <p className="text-lg font-semibold tabular-nums text-error">{data.stats.totalMissing}</p>
+              <p className="text-[11px] text-ink-faint">Missing</p>
+            </div>
+          )}
+          <div className="text-center">
+            <p className="text-lg font-semibold tabular-nums">{data.stats.totalDirectories}</p>
+            <p className="text-[11px] text-ink-faint">Directories</p>
+          </div>
+          {data.stats.totalOrphans > 0 && (
+            <div className="text-center">
+              <p className="text-lg font-semibold tabular-nums text-warning">{data.stats.totalOrphans}</p>
+              <p className="text-[11px] text-ink-faint">Orphans</p>
+            </div>
+          )}
+        </div>
+        <p className="text-xs text-ink-muted leading-relaxed">
+          These files are registered in{" "}
+          <span className="font-mono text-accent">openclaw.json → extraPaths</span>.
+          The agent can find and search these during sweeps.
+          If a file isn't listed here, the agent can only access it by explicit file path — it won't appear in memory search.
+        </p>
+      </div>
+
+      {/* Registered files by category */}
+      <div className="space-y-5 mb-8">
+        {categoryOrder
+          .filter((cat) => grouped.has(cat))
+          .map((cat) => {
+            const files = grouped.get(cat)!;
+            return (
+              <div key={cat}>
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="text-sm font-semibold text-ink">
+                    {categoryLabels[cat] ?? cat}
+                  </h3>
+                  <Badge variant="muted">{files.length}</Badge>
+                </div>
+                <div className="bg-card rounded-xl border border-border overflow-hidden">
+                  {files.map((file, i) => (
+                    <div key={file.path}>
+                      <div
+                        onClick={() => !file.isDirectory && file.exists && viewFile(file.path)}
+                        className={cn(
+                          "flex items-center gap-3 px-4 py-2.5 transition-colors",
+                          i > 0 && "border-t border-border/40",
+                          !file.exists && "bg-error/5",
+                          !file.isDirectory && file.exists && "cursor-pointer hover:bg-cream/60",
+                        )}
+                      >
+                        {file.isDirectory ? (
+                          <Folder className="w-3.5 h-3.5 text-accent shrink-0" />
+                        ) : !file.exists ? (
+                          <AlertTriangle className="w-3.5 h-3.5 text-error shrink-0" />
+                        ) : (
+                          <FileText className="w-3.5 h-3.5 text-ink-faint shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm text-ink font-medium">
+                            {file.relativePath}
+                          </span>
+                          {file.preview && expandedFile !== file.path && (
+                            <p className="text-[11px] text-ink-faint truncate mt-0.5">{file.preview}</p>
+                          )}
+                        </div>
+                        {!file.exists && (
+                          <Badge variant="error">missing</Badge>
+                        )}
+                        {file.isDirectory && (
+                          <Badge variant="accent">directory</Badge>
+                        )}
+                        {file.modifiedAt && (
+                          <span className="text-[11px] text-ink-faint shrink-0">
+                            {formatRelativeTime(file.modifiedAt)}
+                          </span>
+                        )}
+                        {file.size !== undefined && (
+                          <span className="text-[11px] text-ink-faint tabular-nums shrink-0">
+                            {formatBytes(file.size)}
+                          </span>
+                        )}
+                        {!file.isDirectory && file.exists && (
+                          expandedFile === file.path
+                            ? <EyeOff className="w-3 h-3 text-ink-faint shrink-0" />
+                            : <Eye className="w-3 h-3 text-ink-faint shrink-0" />
+                        )}
+                      </div>
+                      {expandedFile === file.path && (
+                        <div className="border-t border-border/40 bg-cream-dark/20 px-4 py-3">
+                          {fileLoading ? (
+                            <div className="skeleton h-32" />
+                          ) : fileContent ? (
+                            <pre className="text-xs font-mono text-ink-muted whitespace-pre-wrap overflow-auto max-h-80 leading-relaxed">
+                              {fileContent.content}
+                            </pre>
+                          ) : (
+                            <p className="text-xs text-ink-faint">Failed to load file content</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+      </div>
+
+      {/* Orphaned files */}
+      {data.orphans.length > 0 && (
+        <div className="mb-6">
+          <button
+            onClick={() => setShowOrphans(!showOrphans)}
+            className="flex items-center gap-2 mb-3 text-sm font-semibold text-warning hover:text-ink transition-colors"
+          >
+            {showOrphans ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+            <AlertTriangle className="w-3.5 h-3.5" />
+            Orphaned Files
+            <Badge variant="warning">{data.orphans.length}</Badge>
+          </button>
+          {showOrphans && (
+            <div>
+              <p className="text-xs text-ink-muted mb-3 leading-relaxed">
+                These files exist in{" "}
+                <span className="font-mono text-accent">workspace/</span>{" "}
+                but aren't registered in extraPaths.
+                The agent can read them if explicitly told to, but won't discover them through search.
+                To register a file, add its absolute path to{" "}
+                <span className="font-mono text-accent">agents.defaults.memorySearch.extraPaths</span>{" "}
+                in openclaw.json.
+              </p>
+              <div className="bg-card rounded-xl border border-border overflow-hidden">
+                {data.orphans.map((orphan, i) => (
+                  <div
+                    key={orphan.path}
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-2.5",
+                      i > 0 && "border-t border-border/40",
+                    )}
+                  >
+                    <EyeOff className="w-3.5 h-3.5 text-warning shrink-0" />
+                    <span className="text-sm text-ink font-medium flex-1">{orphan.relativePath}</span>
+                    <span className="text-[11px] text-ink-faint">{formatRelativeTime(orphan.modifiedAt)}</span>
+                    <span className="text-[11px] text-ink-faint tabular-nums">{formatBytes(orphan.size)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* How it works is now at the top */}
     </div>
   );
 }

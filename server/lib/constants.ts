@@ -1,6 +1,11 @@
+import fs from "node:fs";
 import path from "node:path";
 
-export const PROJECT_ROOT = path.resolve(import.meta.dirname, "../..");
+// Resolve project root: if running from build/, go up one more level
+const candidate = path.resolve(import.meta.dirname, "../..");
+export const PROJECT_ROOT = fs.existsSync(path.join(candidate, "package.json"))
+  ? candidate
+  : path.resolve(candidate, "..");
 export const DIST_DIR = path.join(PROJECT_ROOT, "dist");
 export const DEFAULT_PORT = 18801;
 export const DEFAULT_CACHE_TTL_MS = 30_000;

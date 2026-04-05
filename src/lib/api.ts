@@ -522,6 +522,50 @@ export function useDataSources() {
   return useApi<DataSource[]>("/api/memory/sources", { refreshInterval: 0 });
 }
 
+// --- Agent Context ---
+
+export type AgentContextFile = {
+  path: string;
+  relativePath: string;
+  category: string;
+  exists: boolean;
+  isDirectory: boolean;
+  size?: number;
+  modifiedAt?: string;
+  preview?: string;
+};
+
+export type AgentContextOrphan = {
+  path: string;
+  relativePath: string;
+  size: number;
+  modifiedAt: string;
+};
+
+export type AgentContextData = {
+  registered: AgentContextFile[];
+  orphans: AgentContextOrphan[];
+  stats: {
+    totalRegistered: number;
+    totalExisting: number;
+    totalMissing: number;
+    totalOrphans: number;
+    totalDirectories: number;
+  };
+};
+
+export type AgentContextFileContent = {
+  path: string;
+  name: string;
+  content: string;
+  size: number;
+  modifiedAt: string;
+};
+
+export function useAgentContext() {
+  return useApi<AgentContextData>("/api/memory/agent-context", { refreshInterval: 60_000 });
+}
+
 export type IncidentStatus = "open" | "acknowledged" | "resolved";
 export type IncidentSeverity = "info" | "warning" | "critical";
 

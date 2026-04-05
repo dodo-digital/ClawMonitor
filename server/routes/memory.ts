@@ -9,6 +9,7 @@ import { env } from "../lib/env.js";
 import { HttpError } from "../lib/errors.js";
 import { ensureInsideBase } from "../lib/filesystem.js";
 import { asyncHandler, ok } from "../lib/http.js";
+import { getExtraPaths } from "../lib/openclaw.js";
 import { getQmdStatusOutput, runQmdSearch, startQmdUpdate } from "../lib/system-info.js";
 
 const cache = new TTLCache<string, unknown>();
@@ -431,5 +432,177 @@ memoryRouter.get(
       path: relativePath,
       content: await fs.promises.readFile(safePath, "utf8"),
     });
+  }),
+);
+
+// --- Agent Context: extraPaths visibility ---
+
+function categorizeExtraPath(filePath: string): string {
+  const name = path.basename(filePath).toLowerCase();
+  if (["soul.md", "identity.md", "user.md"].includes(name)) return "identity";
+  if (["priority-map.md", "auto-resolver.md", "heartbeat.md"].includes(name)) return "policy";
+  if (["tools.md", "tools-gog.md", "accounts.md", "security.md", "agents.md"].includes(name)) return "reference";
+  if (name === "contacts.md") return "contacts";
+  if (filePath.includes("tasks/")) return "tasks";
+  if (name === "skill.md" || filePath.includes("/skills/")) return "skill";
+  // Check if it's a directory path (life/, knowledge/, research/, projects/)
+  const dirName = path.basename(filePath);
+  if (["life", "knowledge", "research", "projects"].includes(dirName)) return "knowledge-dir";
+  return "other";
+}
+
+async function getFilePreview(filePath: string): Promise<string> {
+  try {
+    const content = await fs.promises.readFile(filePath, "utf8");
+    const lines = content.split("\n").filter((l) => l.trim() && !l.startsWith("---"));
+    return lines.slice(0, 4).join(" ").slice(0, 200).trim();
+  } catch {
+    return "";
+  }
+}
+
+memoryRouter.get(
+  "/agent-context",
+  asyncHandler(async (_req, res) => {
+    const data = await cache.getOrSet("memory:agent-context", async () => {
+      const extraPaths = await getExtraPaths();
+      const workspaceDir = env.workspaceDir;
+
+      // Resolve registered paths
+      const registered = await Promise.all(
+        extraPaths.map(async (p) => {
+          let exists = false;
+          let isDirectory = false;
+          let size: number | undefined;
+          let modifiedAt: string | undefined;
+          let preview = "";
+
+          try {
+            const stats = await fs.promises.stat(p);
+            exists = true;
+            isDirectory = stats.isDirectory();
+            if (!isDirectory) {
+              size = stats.size;
+              modifiedAt = stats.mtime.toISOString();
+              if (p.endsWith(".md")) {
+                preview = await getFilePreview(p);
+              }
+            } else {
+              modifiedAt = stats.mtime.toISOString();
+            }
+          } catch {
+            // File doesn't exist
+          }
+
+          const relativePath = p.startsWith(workspaceDir)
+            ? p.slice(workspaceDir.length + 1)
+            : p.startsWith(env.openclawHome)
+              ? "~/.openclaw/" + p.slice(env.openclawHome.length + 1)
+              : p;
+
+          return {
+            path: p,
+            relativePath,
+            category: categorizeExtraPath(p),
+            exists,
+            isDirectory,
+            size,
+            modifiedAt,
+            preview,
+          };
+        }),
+      );
+
+      // Collect all registered paths and registered directory prefixes
+      const registeredSet = new Set(extraPaths);
+      const registeredDirs = extraPaths.filter((p) => {
+        try { return fs.statSync(p).isDirectory(); } catch { return false; }
+      });
+
+      // Scan workspace for orphans (*.md files not in extraPaths and not inside a registered dir)
+      const orphans: Array<{
+        path: string;
+        relativePath: string;
+        size: number;
+        modifiedAt: string;
+      }> = [];
+
+      try {
+        const entries = await fs.promises.readdir(workspaceDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+          const fullPath = path.join(workspaceDir, entry.name);
+          if (registeredSet.has(fullPath)) continue;
+          // Check if inside a registered directory
+          const insideRegistered = registeredDirs.some((dir) => fullPath.startsWith(dir + "/"));
+          if (insideRegistered) continue;
+
+          const stats = await fs.promises.stat(fullPath);
+          orphans.push({
+            path: fullPath,
+            relativePath: entry.name,
+            size: stats.size,
+            modifiedAt: stats.mtime.toISOString(),
+          });
+        }
+      } catch {
+        // workspace dir unreadable
+      }
+
+      const totalExisting = registered.filter((r) => r.exists).length;
+      const totalMissing = registered.filter((r) => !r.exists).length;
+      const totalDirectories = registered.filter((r) => r.isDirectory).length;
+
+      return {
+        registered,
+        orphans,
+        stats: {
+          totalRegistered: registered.length,
+          totalExisting,
+          totalMissing,
+          totalOrphans: orphans.length,
+          totalDirectories,
+        },
+      };
+    }, 30_000);
+
+    ok(res, data);
+  }),
+);
+
+memoryRouter.get(
+  "/agent-context/file",
+  asyncHandler(async (req, res) => {
+    const filePath = String(req.query.path ?? "").trim();
+    if (!filePath) {
+      throw new HttpError("path query parameter is required", 400);
+    }
+
+    // Must be inside workspace or openclaw home
+    const isInWorkspace = filePath.startsWith(env.workspaceDir);
+    const isInOpenClaw = filePath.startsWith(env.openclawHome);
+    if (!isInWorkspace && !isInOpenClaw) {
+      throw new HttpError("Path must be inside workspace or OpenClaw home", 403);
+    }
+
+    try {
+      const stats = await fs.promises.stat(filePath);
+      if (!stats.isFile()) {
+        throw new HttpError("Target is not a file", 400);
+      }
+      const content = await fs.promises.readFile(filePath, "utf8");
+      ok(res, {
+        path: filePath,
+        name: path.basename(filePath),
+        content,
+        size: stats.size,
+        modifiedAt: stats.mtime.toISOString(),
+      });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new HttpError("File not found", 404);
+      }
+      throw err;
+    }
   }),
 );

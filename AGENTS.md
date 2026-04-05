@@ -69,11 +69,13 @@ All config lives at `~/.openclaw/`.
 | `delivery-queue/` | Async message delivery (check `failed/` for stuck messages) |
 | `dashboard.sqlite` | This dashboard's database |
 
-## Making knowledge files visible in the dashboard
+## Making knowledge files visible to the agent
 
-New workspace files must be registered in `openclaw.json` to appear in the dashboard.
+New workspace files must be registered in `openclaw.json` to be discoverable by the agent's memory search.
 
 Add the file's absolute path to the `extraPaths` array at `agents.defaults.memorySearch.extraPaths`.
+
+Verify registration in the dashboard: Memory & Knowledge → Agent Context tab. This shows all registered files, flags missing references, and lists orphaned workspace files not yet registered.
 
 ## Key constraints
 
