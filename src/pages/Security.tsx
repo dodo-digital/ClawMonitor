@@ -58,7 +58,7 @@ export function Security() {
 }
 
 // =============================================================================
-// Config Health — "Is your config secure?"
+// Config Health — collapsible score bar (original design)
 // =============================================================================
 
 function ConfigHealthSection({
@@ -70,55 +70,54 @@ function ConfigHealthSection({
   scanning: boolean;
   onScan: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <section>
-      <SectionHeader title="Config Health" />
+      <div className="bg-card rounded-xl border border-border">
+        {/* Compact summary row */}
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex items-center gap-3 w-full px-4 py-3 text-left hover:bg-cream-dark/30 transition-colors"
+        >
+          {expanded ? <ChevronDown className="w-3.5 h-3.5 text-ink-faint" /> : <ChevronRight className="w-3.5 h-3.5 text-ink-faint" />}
 
-      {compliance ? (
-        <div className="space-y-3">
-          {/* Score bar */}
-          <div className={cn(
-            "flex items-center gap-4 rounded-xl border p-4",
-            compliance.score >= 80 ? "bg-healthy/5 border-healthy/20" : "bg-error/5 border-error/20",
-          )}>
-            {compliance.score >= 80
-              ? <ShieldCheck className="w-6 h-6 text-healthy shrink-0" />
-              : <ShieldAlert className="w-6 h-6 text-error shrink-0" />}
-            <div className="flex-1">
-              <span className={cn("text-2xl font-bold tabular-nums", compliance.score >= 80 ? "text-healthy" : "text-error")}>
-                {compliance.score}
+          {compliance ? (
+            <>
+              {compliance.score >= 80
+                ? <ShieldCheck className="w-4 h-4 text-healthy" />
+                : <ShieldAlert className="w-4 h-4 text-error" />}
+              <span className={cn("text-sm font-bold tabular-nums", compliance.score >= 80 ? "text-healthy" : compliance.score >= 50 ? "text-warning" : "text-error")}>
+                {compliance.score}/100
               </span>
-              <span className="text-sm text-ink-muted">/100</span>
-              <p className="text-xs text-ink-faint mt-0.5">
+              <span className="text-xs text-ink-faint">
                 Scanned {formatRelativeTime(compliance.scannedAt)}
-              </p>
-            </div>
-            <button
-              onClick={onScan}
-              disabled={scanning}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-card border border-border text-ink rounded-lg hover:bg-cream-dark/40 disabled:opacity-50 transition-colors"
-            >
-              <RefreshCw className={cn("w-3 h-3", scanning && "animate-spin")} />
-              {scanning ? "Scanning" : "Re-scan"}
-            </button>
-          </div>
+              </span>
+            </>
+          ) : (
+            <span className="text-sm text-ink-muted">No scan run yet</span>
+          )}
 
-          {/* Checklist */}
-          <div className="bg-card rounded-xl border border-border divide-y divide-border/40">
+          <button
+            onClick={(e) => { e.stopPropagation(); onScan(); }}
+            disabled={scanning}
+            className="ml-auto flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-cream-dark/60 text-ink-muted rounded-md hover:bg-cream-dark transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={cn("w-3 h-3", scanning && "animate-spin")} />
+            {scanning ? "Scanning" : "Scan"}
+          </button>
+        </button>
+
+        {/* Expanded checklist */}
+        {expanded && compliance && (
+          <div className="border-t border-border/40 divide-y divide-border/40">
             <ChecklistItem label="Exec security" sublabel="Can agents run commands safely?" category={compliance.breakdown.execPosture} />
             <ChecklistItem label="Secret exposure" sublabel="API keys leaked in tool outputs?" category={compliance.breakdown.credentialExposure} />
             <ChecklistItem label="Skill files" sublabel="Have installed skills been tampered with?" category={compliance.breakdown.skillIntegrity} />
             <ChecklistItem label="Auth profiles" sublabel="API keys configured and valid?" category={compliance.breakdown.authHealth} />
           </div>
-        </div>
-      ) : (
-        <div className="bg-card rounded-xl border border-border p-6 text-center">
-          <p className="text-sm text-ink-muted">No scan yet.</p>
-          <button onClick={onScan} disabled={scanning} className="mt-2 px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50">
-            {scanning ? "Scanning..." : "Run first scan"}
-          </button>
-        </div>
-      )}
+        )}
+      </div>
     </section>
   );
 }
@@ -134,11 +133,9 @@ function ChecklistItem({ label, sublabel, category }: { label: string; sublabel:
     <div className="px-4 py-2.5">
       <div className="flex items-center gap-3">
         <StatusIcon className={cn("w-3.5 h-3.5 shrink-0", color)} />
-        <div className="flex-1 min-w-0">
-          <span className="text-sm text-ink font-medium">{label}</span>
-          <span className="text-xs text-ink-faint ml-2 hidden sm:inline">{sublabel}</span>
-        </div>
-        <span className={cn("text-xs font-bold tabular-nums shrink-0", color)}>{category.score}/{category.max}</span>
+        <span className="text-sm text-ink">{label}</span>
+        <span className="text-xs text-ink-faint">{sublabel}</span>
+        <span className={cn("ml-auto text-xs font-bold tabular-nums", color)}>{category.score}/{category.max}</span>
       </div>
       {!perfect && category.details.length > 0 && (
         <div className="mt-1.5 ml-6 space-y-0.5">
@@ -152,7 +149,7 @@ function ChecklistItem({ label, sublabel, category }: { label: string; sublabel:
 }
 
 // =============================================================================
-// Access Surface — "What doors are open?"
+// Access Surface
 // =============================================================================
 
 function AccessSurfaceSection({ surface }: { surface: import("@/lib/api").AccessSurface }) {
@@ -160,16 +157,16 @@ function AccessSurfaceSection({ surface }: { surface: import("@/lib/api").Access
 
   return (
     <section>
-      <SectionHeader title="Access Surface" />
+      <h2 className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider mb-3">Access Surface</h2>
 
-      {/* Alert banner if any high-risk channels */}
+      {/* Alert for open channels */}
       {highRiskChannels.length > 0 && (
         <div className="bg-error/8 border border-error/20 rounded-xl px-4 py-3 mb-4">
           <p className="text-sm text-error font-medium">
-            {highRiskChannels.length} channel{highRiskChannels.length > 1 ? "s" : ""} with open access
+            {highRiskChannels.map((c) => c.name).join(", ")} {highRiskChannels.length > 1 ? "have" : "has"} open access
           </p>
           <p className="text-xs text-ink-muted mt-0.5">
-            {highRiskChannels.map((c) => c.name).join(", ")} — anyone can message the agent through {highRiskChannels.length > 1 ? "these" : "this"}
+            Anyone can message the agent through {highRiskChannels.length > 1 ? "these channels" : "this channel"}
           </p>
         </div>
       )}
@@ -184,7 +181,7 @@ function AccessSurfaceSection({ surface }: { surface: import("@/lib/api").Access
       {/* Webhooks */}
       {surface.webhooks.length > 0 && (
         <div className="bg-card rounded-xl border border-border divide-y divide-border/40 mb-4">
-          <div className="px-4 py-2.5 text-xs font-semibold text-ink uppercase tracking-wider bg-cream-dark/30">
+          <div className="px-4 py-2 text-[11px] font-semibold text-ink-faint uppercase tracking-wider">
             Webhooks
             {!surface.hooksEnabled && <Badge variant="muted" className="ml-2">disabled</Badge>}
           </div>
@@ -194,28 +191,24 @@ function AccessSurfaceSection({ surface }: { surface: import("@/lib/api").Access
         </div>
       )}
 
-      {/* Gateway config — inline, tighter */}
-      <div className="bg-card rounded-xl border border-border px-4 py-3">
-        <div className="text-xs font-semibold text-ink uppercase tracking-wider mb-2">Gateway</div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-1.5 gap-x-4 text-xs">
-          <GatewayField label="Bind" value={surface.gateway.bind} good={surface.gateway.bind === "127.0.0.1" || surface.gateway.bind === "loopback"} />
-          <GatewayField label="Auth" value={surface.gateway.authMode} good={surface.gateway.authMode === "token"} />
-          <GatewayField label="Tailscale" value={surface.gateway.tailscale ? "enabled" : "off"} />
-          <GatewayField label="Exec" value={surface.execSecurity} good={surface.execSecurity === "full"} />
-          <GatewayField label="Agents" value={String(surface.agentCount)} />
-          <GatewayField label="Bindings" value={String(surface.totalBindings)} />
-        </div>
+      {/* Gateway — compact strip */}
+      <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
+        <GwField label="Bind" value={surface.gateway.bind} good={surface.gateway.bind === "127.0.0.1" || surface.gateway.bind === "loopback"} />
+        <GwField label="Auth" value={surface.gateway.authMode} good={surface.gateway.authMode === "token"} />
+        <GwField label="Tailscale" value={surface.gateway.tailscale ? "yes" : "no"} />
+        <GwField label="Exec" value={surface.execSecurity} good={surface.execSecurity === "full"} />
+        <GwField label="Agents" value={String(surface.agentCount)} />
+        <GwField label="Bindings" value={String(surface.totalBindings)} />
       </div>
     </section>
   );
 }
 
-function GatewayField({ label, value, good }: { label: string; value: string; good?: boolean }) {
+function GwField({ label, value, good }: { label: string; value: string; good?: boolean }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-ink-faint">{label}</span>
-      <span className={cn("font-medium", good === true ? "text-healthy" : good === false ? "text-error" : "text-ink")}>{value}</span>
-    </div>
+    <span className="text-ink-faint">
+      {label}: <strong className={cn(good === true ? "text-healthy" : good === false ? "text-error" : "text-ink-muted")}>{value}</strong>
+    </span>
   );
 }
 
@@ -223,13 +216,10 @@ function ChannelRow({ channel }: { channel: AccessChannel }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div>
+    <div className={channel.risk === "high" && channel.enabled ? "bg-error/5" : ""}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className={cn(
-          "flex items-center gap-3 w-full px-4 py-3 text-left transition-colors hover:bg-cream-dark/30",
-          channel.risk === "high" && channel.enabled && "bg-error/5",
-        )}
+        className="flex items-center gap-3 w-full px-4 py-3 text-left hover:bg-cream-dark/30 transition-colors"
       >
         {expanded
           ? <ChevronDown className="w-3.5 h-3.5 text-ink-faint shrink-0" />
@@ -254,20 +244,14 @@ function ChannelRow({ channel }: { channel: AccessChannel }) {
       </button>
 
       {expanded && (
-        <div className="px-4 pb-3 ml-7 space-y-1.5 text-xs text-ink-muted">
-          <div>
-            <strong>DM policy:</strong> {channel.dmPolicy}
-            {channel.dmPolicy === "open" && <span className="text-error ml-1">— anyone can message the agent</span>}
-            {channel.dmPolicy === "allowlist" && channel.allowedUsers != null && (
-              <span> — {channel.allowedUsers} approved user{channel.allowedUsers !== 1 ? "s" : ""}</span>
-            )}
-            {channel.dmPolicy === "pairing" && <span className="text-warning ml-1">— anyone can request, requires approval</span>}
+        <div className="px-4 pb-3 ml-7 space-y-1 text-xs text-ink-muted">
+          <div>DM policy: <strong>{channel.dmPolicy}</strong>
+            {channel.dmPolicy === "open" && <span className="text-error"> — anyone can message</span>}
+            {channel.dmPolicy === "allowlist" && channel.allowedUsers != null && <span> — {channel.allowedUsers} approved</span>}
+            {channel.dmPolicy === "pairing" && <span className="text-warning"> — requires approval</span>}
           </div>
-          <div><strong>Group policy:</strong> {channel.groupPolicy}</div>
-          <div>
-            <strong>Agents:</strong>{" "}
-            {channel.boundAgents.length > 0 ? channel.boundAgents.join(", ") : "default"}
-          </div>
+          <div>Group policy: <strong>{channel.groupPolicy}</strong></div>
+          <div>Agents: <strong>{channel.boundAgents.length > 0 ? channel.boundAgents.join(", ") : "default"}</strong></div>
         </div>
       )}
     </div>
@@ -289,7 +273,7 @@ function WebhookRow({ webhook }: { webhook: AccessWebhook }) {
 }
 
 // =============================================================================
-// Activity — "What's happening right now?"
+// Channel Activity
 // =============================================================================
 
 function ActivitySection({ channels, surface }: { channels: ChannelActivity[]; surface: import("@/lib/api").AccessSurface }) {
@@ -297,7 +281,7 @@ function ActivitySection({ channels, surface }: { channels: ChannelActivity[]; s
 
   return (
     <section>
-      <SectionHeader title="Channel Activity" />
+      <h2 className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider mb-3">Channel Activity</h2>
 
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         <div className="grid grid-cols-[1fr_65px_65px_65px_95px] gap-2 px-4 py-2 border-b border-border text-[10px] uppercase tracking-wider text-ink-faint">
@@ -344,15 +328,5 @@ function ActivitySection({ channels, surface }: { channels: ChannelActivity[]; s
       </div>
       <p className="text-[11px] text-ink-faint mt-1.5">24h / 7d totals</p>
     </section>
-  );
-}
-
-// =============================================================================
-// Shared
-// =============================================================================
-
-function SectionHeader({ title }: { title: string }) {
-  return (
-    <h2 className="text-xs font-semibold text-ink-faint uppercase tracking-wider mb-3">{title}</h2>
   );
 }
