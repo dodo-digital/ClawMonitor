@@ -6,7 +6,6 @@ import { PageSkeleton } from "@/components/ui/skeleton";
 import {
   useSecurityLatest,
   useSecurityHistory,
-  apiPost,
   type SecurityComplianceReport,
   type SecurityCategoryScore,
   type SecurityCredentialCategory,
@@ -32,7 +31,7 @@ export function Security() {
   async function runScan() {
     setScanning(true);
     try {
-      await apiPost("/api/security/scan");
+      await fetch("/api/security/scan");
       await mutate();
       setToast("Scan complete");
     } catch {
