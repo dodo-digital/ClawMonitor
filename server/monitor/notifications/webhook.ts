@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 
+import { redactSecrets } from "../../lib/redact.js";
 import type { NotificationDeliveryResult, NotificationDestination, NotificationPayload } from "./types.js";
 
 export function computeSignature(secret: string, timestamp: string, body: string): string {
@@ -25,7 +26,7 @@ export class WebhookDestination implements NotificationDestination {
     }
 
     try {
-      const body = JSON.stringify(payload);
+      const body = redactSecrets(JSON.stringify(payload));
       const timestamp = Math.floor(Date.now() / 1000).toString();
 
       const headers: Record<string, string> = {

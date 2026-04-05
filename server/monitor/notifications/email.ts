@@ -1,13 +1,28 @@
+import { redactSecrets } from "../../lib/redact.js";
 import type { NotificationDeliveryResult, NotificationDestination, NotificationPayload } from "./types.js";
 
+const SUBJECT_PREFIX: Record<string, string> = {
+  opened: "INCIDENT",
+  resolved: "RESOLVED",
+  escalated: "ESCALATED",
+  muted: "MUTED",
+};
+
+const BODY_HEADING: Record<string, string> = {
+  opened: "Incident Opened",
+  resolved: "Incident Resolved",
+  escalated: "Incident Escalated",
+  muted: "Incident Muted (Flapping)",
+};
+
 function buildSubject(payload: NotificationPayload): string {
-  const prefix = payload.eventType === "opened" ? "INCIDENT" : "RESOLVED";
+  const prefix = SUBJECT_PREFIX[payload.eventType] ?? "UPDATE";
   return `[ClawMonitor] ${prefix}: ${payload.incident.title}`;
 }
 
 function buildBody(payload: NotificationPayload): string {
   const { incident, eventType, check } = payload;
-  const heading = eventType === "opened" ? "Incident Opened" : "Incident Resolved";
+  const heading = BODY_HEADING[eventType] ?? "Incident Update";
 
   return [
     heading,
@@ -17,7 +32,7 @@ function buildBody(payload: NotificationPayload): string {
     `Check: ${incident.check_type}`,
     `Target: ${incident.target_key}`,
     `Status: ${check.status}`,
-    `Summary: ${check.summary}`,
+    `Summary: ${redactSecrets(check.summary)}`,
     `Workspace: ${check.workspaceId}`,
     "",
     `Opened: ${incident.opened_at}`,

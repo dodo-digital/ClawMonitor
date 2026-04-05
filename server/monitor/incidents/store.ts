@@ -207,6 +207,44 @@ export function insertIncidentEvent(
   return db.prepare("SELECT * FROM incident_events WHERE id = ?").get(info.lastInsertRowid) as IncidentEventRecord;
 }
 
+export function getRecentReopenCount(workspaceId: string, dedupeKey: string): number {
+  const row = db.prepare(
+    `
+      SELECT COUNT(*) AS count
+      FROM incident_events ie
+      JOIN incidents i ON ie.incident_id = i.id
+      WHERE i.workspace_id = ? AND i.dedupe_key = ? AND ie.event_type = 'opened'
+        AND ie.created_at > datetime('now', '-24 hours')
+    `,
+  ).get(workspaceId, dedupeKey) as { count: number };
+  return row.count;
+}
+
+export function escalateIncident(incidentId: number, newSeverity: string): IncidentRecord {
+  db.prepare(
+    `
+      UPDATE incidents
+      SET severity = @severity,
+          last_seen_at = datetime('now')
+      WHERE id = @id
+    `,
+  ).run({ id: incidentId, severity: newSeverity });
+
+  return db.prepare("SELECT * FROM incidents WHERE id = ?").get(incidentId) as IncidentRecord;
+}
+
+export function getEscalationCandidates(workspaceId: string, ageMinutes: number): IncidentRecord[] {
+  return db.prepare(
+    `
+      SELECT *
+      FROM incidents
+      WHERE workspace_id = ? AND status != 'resolved' AND severity = 'warning'
+        AND (julianday('now') - julianday(opened_at)) * 24 * 60 > ?
+        AND (julianday('now') - julianday(last_seen_at)) * 24 * 60 < 30
+    `,
+  ).all(workspaceId, ageMinutes) as IncidentRecord[];
+}
+
 export function listIncidents(workspaceId: string): Array<IncidentRecord & { event_count: number }> {
   return db.prepare(
     `

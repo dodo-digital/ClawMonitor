@@ -6,6 +6,7 @@ import {
   runExecSecurityCheck,
   runGatewayCheck,
 } from "./checks/core.js";
+import { runSecurityScanCheck } from "./checks/security.js";
 import {
   runAuthErrorsCheck,
   runDeadRunsCheck,
@@ -158,6 +159,26 @@ export class MonitorScheduler {
         inFlight: false,
         run: async () => {
           await this.processor.processCheck(runAuthErrorsCheck());
+        },
+      },
+      // --- Incident escalation check ---
+      {
+        name: "escalation-check",
+        intervalMs: 5 * 60_000,
+        timer: null,
+        inFlight: false,
+        run: async () => {
+          await this.processor.runEscalationCheck();
+        },
+      },
+      // --- Security scan ---
+      {
+        name: "security-scan",
+        intervalMs: 30 * 60_000,
+        timer: null,
+        inFlight: false,
+        run: async () => {
+          await this.processor.processCheck(await runSecurityScanCheck());
         },
       },
     ];

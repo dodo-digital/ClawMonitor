@@ -1,15 +1,25 @@
 import fs from "node:fs";
 
+import { redactSecrets } from "../../lib/redact.js";
 import type { IncidentRecord, MonitorCheckResultInput } from "../types.js";
 import type { NotificationDeliveryResult, NotificationDestination, NotificationPayload } from "./types.js";
+
+type EventType = NotificationPayload["eventType"];
 
 function escapeTelegram(value: string): string {
   return value.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&");
 }
 
-function buildMessage(incident: IncidentRecord, eventType: "opened" | "resolved", check: MonitorCheckResultInput): string {
-  const heading = eventType === "opened" ? "Incident opened" : "Incident resolved";
-  return [
+const EVENT_HEADINGS: Record<EventType, string> = {
+  opened: "Incident opened",
+  resolved: "Incident resolved",
+  escalated: "Incident escalated",
+  muted: "Incident muted (flapping)",
+};
+
+function buildMessage(incident: IncidentRecord, eventType: EventType, check: MonitorCheckResultInput): string {
+  const heading = EVENT_HEADINGS[eventType];
+  return redactSecrets([
     `*${escapeTelegram(heading)}*`,
     `Severity: ${escapeTelegram(incident.severity)}`,
     `Check: ${escapeTelegram(incident.check_type)}`,
@@ -17,7 +27,7 @@ function buildMessage(incident: IncidentRecord, eventType: "opened" | "resolved"
     `Status: ${escapeTelegram(check.status)}`,
     `Summary: ${escapeTelegram(check.summary)}`,
     `Workspace: ${escapeTelegram(check.workspaceId)}`,
-  ].join("\n");
+  ].join("\n"));
 }
 
 export class TelegramDestination implements NotificationDestination {

@@ -1,9 +1,22 @@
+import { redactSecrets } from "../../lib/redact.js";
 import type { NotificationDeliveryResult, NotificationDestination, NotificationPayload } from "./types.js";
 
 function buildBlocks(payload: NotificationPayload): unknown[] {
   const { incident, eventType, check } = payload;
-  const emoji = eventType === "opened" ? ":rotating_light:" : ":white_check_mark:";
-  const heading = eventType === "opened" ? "Incident Opened" : "Incident Resolved";
+  const emojiMap: Record<string, string> = {
+    opened: ":rotating_light:",
+    resolved: ":white_check_mark:",
+    escalated: ":arrow_double_up:",
+    muted: ":mute:",
+  };
+  const headingMap: Record<string, string> = {
+    opened: "Incident Opened",
+    resolved: "Incident Resolved",
+    escalated: "Incident Escalated",
+    muted: "Incident Muted (Flapping)",
+  };
+  const emoji = emojiMap[eventType] ?? ":question:";
+  const heading = headingMap[eventType] ?? "Incident Update";
 
   return [
     {
@@ -21,7 +34,7 @@ function buildBlocks(payload: NotificationPayload): unknown[] {
     },
     {
       type: "section",
-      text: { type: "mrkdwn", text: `*Summary:* ${check.summary}` },
+      text: { type: "mrkdwn", text: `*Summary:* ${redactSecrets(check.summary)}` },
     },
   ];
 }

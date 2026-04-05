@@ -1,4 +1,5 @@
-import { useHealth, useSummary, useCosts, useSessions } from "@/lib/api";
+import { useState } from "react";
+import { useHealth, useSummary, useCosts, useSessions, useSecurityLatest, apiPost, type HealResult } from "@/lib/api";
 import { Badge, ChannelBadge, StatusDot } from "@/components/ui/badge";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/error-state";
@@ -20,14 +21,19 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
+  Shield,
+  Heart,
 } from "lucide-react";
 import { Link } from "react-router";
 
 export function Dashboard() {
+  const [healing, setHealing] = useState(false);
+  const [healResult, setHealResult] = useState<HealResult | null>(null);
   const { data: health, error: healthErr, mutate: retryHealth } = useHealth();
   const { data: summary, error: summaryErr, mutate: retrySummary } = useSummary();
   const { data: costs } = useCosts();
   const { data: sessionsData } = useSessions();
+  const { data: securityReport } = useSecurityLatest();
 
   const sessionLookup = new Map(
     sessionsData?.items.map((s) => [s.sessionKey, { sessionId: s.sessionId, agentId: s.agentId }]) ?? [],
@@ -61,6 +67,17 @@ export function Dashboard() {
           value={costs ? formatCost(costs.summary.cost_24h) : "--"}
           trend={costTrend}
         />
+        {securityReport && (
+          <Link to="/security" className="flex items-baseline gap-1.5 hover:opacity-80 transition-opacity">
+            <span className="text-ink-faint self-center"><Shield className="w-3.5 h-3.5" /></span>
+            <span className="text-xs text-ink-muted">Security</span>
+            <span className={`text-lg font-semibold font-mono tabular-nums leading-none ${
+              securityReport.score >= 80 ? "text-healthy" : securityReport.score >= 50 ? "text-warning" : "text-error"
+            }`}>
+              {securityReport.score}
+            </span>
+          </Link>
+        )}
         {health && (
           <>
             <span className="text-border select-none">|</span>
@@ -83,6 +100,35 @@ export function Dashboard() {
               percent={health.disk.usePercent}
             />
           </>
+        )}
+      </div>
+
+      {/* ── Self-heal button ── */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={async () => {
+            setHealing(true);
+            setHealResult(null);
+            try {
+              const result = await apiPost<HealResult>("/api/system/heal", { target: "all", dryRun: false });
+              setHealResult(result);
+            } catch { /* ignore */ } finally {
+              setHealing(false);
+              retryHealth();
+            }
+          }}
+          disabled={healing}
+          className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-card border border-border text-ink rounded-lg hover:bg-cream-dark/40 disabled:opacity-50 transition-colors"
+        >
+          <Heart className={`w-3 h-3 ${healing ? "animate-pulse text-error" : "text-ink-faint"}`} />
+          {healing ? "Healing..." : "Self-Heal"}
+        </button>
+        {healResult && (
+          <span className={`text-xs ${healResult.success ? "text-healthy" : "text-error"}`}>
+            {healResult.fixedCount > 0 && `${healResult.fixedCount} fixed`}
+            {healResult.brokenCount > 0 && ` ${healResult.brokenCount} broken`}
+            {healResult.fixedCount === 0 && healResult.brokenCount === 0 && "All clear"}
+          </span>
         )}
       </div>
 

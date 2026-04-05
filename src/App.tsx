@@ -13,6 +13,7 @@ import { Identity } from "@/pages/Identity";
 import { Memory } from "@/pages/Memory";
 import { Agents } from "@/pages/Agents";
 import { Incidents } from "@/pages/Incidents";
+import { Security } from "@/pages/Security";
 import { IncidentDetail } from "@/pages/IncidentDetail";
 import { Skills } from "@/pages/Skills";
 import { Plugins } from "@/pages/Plugins";
@@ -57,6 +58,7 @@ export function App() {
             <Route path="memory" element={<Memory />} />
             <Route path="agents" element={<Agents />} />
             <Route path="plugins" element={<Plugins />} />
+            <Route path="security" element={<Security />} />
             <Route path="incidents" element={<Incidents />} />
             <Route path="incidents/:incidentId" element={<IncidentDetail />} />
           </Routes>

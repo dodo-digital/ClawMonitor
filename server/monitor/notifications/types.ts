@@ -2,7 +2,7 @@ import type { IncidentRecord, MonitorCheckResultInput } from "../types.js";
 
 export type NotificationPayload = {
   incident: IncidentRecord;
-  eventType: "opened" | "resolved";
+  eventType: "opened" | "resolved" | "escalated" | "muted";
   check: MonitorCheckResultInput;
 };
 

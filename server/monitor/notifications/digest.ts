@@ -1,6 +1,7 @@
 import fs from "node:fs";
 
 import { db } from "../../lib/db.js";
+import { redactSecrets } from "../../lib/redact.js";
 import type { IncidentRecord } from "../types.js";
 import { DEFAULT_WORKSPACE_ID } from "../workspace.js";
 import { recordNotificationDelivery } from "./delivery-store.js";
@@ -124,7 +125,7 @@ export function formatDigestTelegram(data: DigestData): string {
 
   lines.push(esc(`Summary: ${data.openedLast24h.length} opened, ${data.resolvedLast24h.length} resolved in last 24h.`));
 
-  return lines.join("\n");
+  return redactSecrets(lines.join("\n"));
 }
 
 export function formatDigestPlaintext(data: DigestData): string {
@@ -171,7 +172,7 @@ export function formatDigestPlaintext(data: DigestData): string {
 
   lines.push(`Summary: ${data.openedLast24h.length} opened, ${data.resolvedLast24h.length} resolved in last 24h.`);
 
-  return lines.join("\n");
+  return redactSecrets(lines.join("\n"));
 }
 
 // ---------------------------------------------------------------------------

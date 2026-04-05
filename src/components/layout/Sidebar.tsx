@@ -11,6 +11,7 @@ import {
   FileText,
   Bot,
   Plug,
+  Shield,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -24,6 +25,7 @@ const navSections: NavSection[] = [
       { to: "/", icon: LayoutDashboard, label: "Dashboard" },
       { to: "/activity", icon: Activity, label: "Activity", matchPrefix: "/activity" },
       { to: "/incidents", icon: Siren, label: "Incidents" },
+      { to: "/security", icon: Shield, label: "Security" },
       { to: "/cron", icon: Clock, label: "Cron Jobs" },
     ],
   },

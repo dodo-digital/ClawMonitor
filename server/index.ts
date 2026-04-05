@@ -20,6 +20,7 @@ import { TelegramDestination } from "./monitor/notifications/telegram.js";
 import { WebhookDestination } from "./monitor/notifications/webhook.js";
 import { MonitorScheduler } from "./monitor/scheduler.js";
 import { agentsRouter } from "./routes/agents.js";
+import { healRouter } from "./routes/heal.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { bootstrapRouter } from "./routes/bootstrap.js";
 import { cronRouter } from "./routes/cron.js";
@@ -28,6 +29,7 @@ import { memoryRouter } from "./routes/memory.js";
 import { monitorRouter } from "./routes/monitor.js";
 import { sessionsRouter } from "./routes/sessions.js";
 import { pluginsRouter } from "./routes/plugins.js";
+import { securityRouter } from "./routes/security.js";
 import { skillsRouter } from "./routes/skills.js";
 import { systemRouter } from "./routes/system.js";
 import { LiveFeedBridge } from "./ws/live-feed.js";
@@ -69,6 +71,8 @@ export function createApp(): Express {
   app.use("/api/analytics", analyticsRouter);
   app.use("/api/plugins", pluginsRouter);
   app.use("/api/monitor", monitorRouter);
+  app.use("/api/security", securityRouter);
+  app.use("/api/system/heal", healRouter);
 
   if (fs.existsSync(DIST_DIR)) {
     app.use(express.static(DIST_DIR));

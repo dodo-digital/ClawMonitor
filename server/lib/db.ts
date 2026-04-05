@@ -364,6 +364,32 @@ export function initializeDatabase(dbPath: string): { db: DashboardDatabase; stm
       FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS security_scans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id TEXT NOT NULL,
+      score INTEGER NOT NULL,
+      breakdown_json TEXT NOT NULL,
+      scanned_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS security_baseline (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      sha256 TEXT NOT NULL,
+      recorded_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS heal_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id TEXT NOT NULL,
+      target TEXT NOT NULL,
+      dry_run INTEGER NOT NULL DEFAULT 0,
+      result_json TEXT NOT NULL,
+      success INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS notification_deliveries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       incident_id INTEGER,
@@ -442,6 +468,13 @@ export function initializeDatabase(dbPath: string): { db: DashboardDatabase; stm
     CREATE INDEX IF NOT EXISTS idx_cron_deliveries_job ON cron_deliveries(job_id, timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_cron_deliveries_session ON cron_deliveries(session_key);
     CREATE INDEX IF NOT EXISTS idx_cron_deliveries_timestamp ON cron_deliveries(timestamp DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_security_scans_workspace
+      ON security_scans(workspace_id, scanned_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_security_baseline_workspace
+      ON security_baseline(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_heal_runs_workspace
+      ON heal_runs(workspace_id, created_at DESC);
 
     -- Full-text search index on messages for fast keyword search
     CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(

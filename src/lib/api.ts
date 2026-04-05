@@ -566,6 +566,74 @@ export function useAgentContext() {
   return useApi<AgentContextData>("/api/memory/agent-context", { refreshInterval: 60_000 });
 }
 
+// --- Security ---
+
+export type SecurityCategoryScore = {
+  score: number;
+  max: number;
+  details: string[];
+};
+
+export type SecurityCredentialCategory = SecurityCategoryScore & {
+  findings: Array<{ pattern: string; label: string; index: number; snippet: string }>;
+};
+
+export type SecuritySkillDriftCategory = SecurityCategoryScore & {
+  added: string[];
+  removed: string[];
+  modified: string[];
+  baselineCount: number;
+  currentCount: number;
+};
+
+export type SecurityComplianceReport = {
+  score: number;
+  grade: "A" | "B" | "C" | "D" | "F";
+  breakdown: {
+    execPosture: SecurityCategoryScore;
+    credentialExposure: SecurityCredentialCategory;
+    skillIntegrity: SecuritySkillDriftCategory;
+    authHealth: SecurityCategoryScore;
+  };
+  scannedAt: string;
+};
+
+export type SecurityHistoryItem = {
+  id: number;
+  score: number;
+  scanned_at: string;
+};
+
+export function useSecurityLatest() {
+  return useApi<SecurityComplianceReport | null>("/api/security/latest", { refreshInterval: 60_000 });
+}
+
+export function useSecurityHistory() {
+  return useApi<{ items: SecurityHistoryItem[] }>("/api/security/history", { refreshInterval: 60_000 });
+}
+
+// --- Heal ---
+
+export type HealResult = {
+  success: boolean;
+  fixed: string[];
+  broken: string[];
+  manual: string[];
+  fixedCount: number;
+  brokenCount: number;
+  manualCount: number;
+};
+
+export type TriageResult = {
+  version: string;
+  previousVersion: string;
+  issues: string[];
+  fixes: string[];
+  issueCount: number;
+  fixCount: number;
+  healthy: boolean;
+};
+
 export type IncidentStatus = "open" | "acknowledged" | "resolved";
 export type IncidentSeverity = "info" | "warning" | "critical";
 

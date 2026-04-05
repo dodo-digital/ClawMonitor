@@ -2,6 +2,9 @@
 
 Claw Monitor makes OpenClaw reliable. It watches your instance, runs health checks, opens incidents when something breaks, and notifies you so you or an agent can fix it before it compounds.
 
+Security scanning, self-healing, and incident management improvements are adapted from
+[openclaw-ops](https://github.com/cathrynlavery/openclaw-ops) by Cathryn Lavery (MIT License).
+
 ## Getting Started
 
 The full setup is in [docs/ONBOARDING.md](docs/ONBOARDING.md). It's written for agents. Point your OpenClaw or Claude Code at that file and it will handle cloning, environment discovery, build, skill installation, and notification setup. There's a manual section at the bottom if you'd rather do it yourself.
@@ -94,6 +97,40 @@ The monitor runs checks on a schedule and opens incidents automatically when som
 | `session.tool_failures` | Elevated tool failure rates |
 | `session.retry_loops` | Agents stuck in retry loops |
 | `session.auth_errors` | Authentication failures in sessions |
+| `security.compliance` | Security compliance score (exec posture, credentials, skill drift, auth) |
+
+## Security
+
+The Security page provides a 0-100 compliance score based on four categories:
+
+- **Exec Posture** (0-30) — gateway exec security settings, approval fallbacks, wildcard allowlists
+- **Credential Exposure** (0-30) — scans recent tool call outputs for leaked secrets (API keys, tokens, private keys)
+- **Skill Integrity** (0-20) — SHA-256 drift detection against a saved baseline
+- **Auth Health** (0-20) — validates auth profiles exist and are properly configured
+
+The scan runs automatically every 30 minutes and opens incidents when the score drops below 50.
+
+## Self-Healing
+
+The dashboard includes a self-healing system that can detect and fix common issues:
+
+```bash
+# Run directly
+bash server/scripts/heal.sh --target all
+bash server/scripts/heal.sh --dry-run --target gateway
+
+# Via API
+curl -X POST http://localhost:18801/api/system/heal -H 'Content-Type: application/json' -d '{"target":"all"}'
+```
+
+Targets: `gateway`, `auth`, `exec`, `cron`, `sessions`, `all`. Cross-platform (Linux systemd + macOS launchctl).
+
+A post-upgrade triage script is also available:
+
+```bash
+bash server/scripts/check-update.sh
+bash server/scripts/check-update.sh --auto-fix
+```
 
 ## Notifications
 
