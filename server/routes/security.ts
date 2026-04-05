@@ -1,7 +1,12 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import { Router } from "express";
 
 import { db } from "../lib/db.js";
+import { env } from "../lib/env.js";
 import { asyncHandler, ok } from "../lib/http.js";
+import { HttpError } from "../lib/errors.js";
 import { readOpenClawConfig } from "../lib/openclaw.js";
 import {
   computeComplianceScore,
@@ -54,6 +59,23 @@ securityRouter.get(
           .filter((b) => b.match?.channel === name)
           .map((b) => b.agentId ?? "unknown");
 
+        // Build human-readable explanation
+        let explanation = "";
+        let suggestion = "";
+        if (!enabled) {
+          explanation = "This channel is disabled. No one can reach the agent through it.";
+        } else if (dmPolicy === "open") {
+          explanation = `Anyone ${name === "slack" ? "in your Slack workspace" : `on ${name}`} can message the agent directly. The agent has exec access, meaning it can run commands on this server on behalf of anyone who messages it.`;
+          suggestion = 'Switch to "allowlist" to restrict who can message the agent, or "pairing" to require your approval for each new sender.';
+        } else if (dmPolicy === "allowlist") {
+          explanation = `Only ${allowedUsers ?? "approved"} user${(allowedUsers ?? 0) !== 1 ? "s" : ""} can message the agent. Others are ignored.`;
+        } else if (dmPolicy === "pairing") {
+          explanation = "Anyone can request to message the agent, but you must approve each new sender before they can interact.";
+          suggestion = 'For tighter control, switch to "allowlist" to pre-approve specific users only.';
+        } else if (dmPolicy === "closed") {
+          explanation = "DMs are disabled for this channel. The agent only operates in groups.";
+        }
+
         return {
           name,
           enabled,
@@ -62,6 +84,8 @@ securityRouter.get(
           allowedUsers: allowedUsers ?? null,
           boundAgents,
           risk: enabled ? assessDmRisk(dmPolicy) : ("low" as ChannelRisk),
+          explanation,
+          suggestion,
         };
       });
 
@@ -259,5 +283,46 @@ securityRouter.post(
   asyncHandler(async (_req, res) => {
     const result = await saveSecurityBaseline();
     ok(res, result);
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Channel policy update
+// ---------------------------------------------------------------------------
+
+const VALID_DM_POLICIES = ["open", "allowlist", "pairing", "closed"];
+
+securityRouter.post(
+  "/channel-policy",
+  asyncHandler(async (req, res) => {
+    const { channel, dmPolicy } = req.body as { channel?: string; dmPolicy?: string };
+
+    if (!channel || typeof channel !== "string") {
+      throw new HttpError("channel is required", 400);
+    }
+    if (!dmPolicy || !VALID_DM_POLICIES.includes(dmPolicy)) {
+      throw new HttpError(`dmPolicy must be one of: ${VALID_DM_POLICIES.join(", ")}`, 400);
+    }
+
+    const configPath = path.join(env.openclawHome, "openclaw.json");
+    const raw = await fs.promises.readFile(configPath, "utf8");
+    const config = JSON.parse(raw) as Record<string, unknown>;
+    const channels = (config.channels ?? {}) as Record<string, Record<string, unknown>>;
+
+    if (!channels[channel]) {
+      throw new HttpError(`Channel "${channel}" not found in config`, 404);
+    }
+
+    channels[channel].dmPolicy = dmPolicy;
+    config.channels = channels;
+
+    await fs.promises.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+
+    ok(res, {
+      channel,
+      dmPolicy,
+      note: "Config updated. Restart the gateway for changes to take effect.",
+      restartCommand: "openclaw gateway restart",
+    });
   }),
 );

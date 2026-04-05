@@ -8,6 +8,7 @@ import {
   useAccessSurface,
   useChannelActivity,
   useSecurityLatest,
+  apiPost,
   type AccessChannel,
   type AccessWebhook,
   type ChannelActivity,
@@ -24,6 +25,7 @@ import {
   X,
   Minus,
   RefreshCw,
+  Lock,
 } from "lucide-react";
 
 export function Security() {
@@ -48,7 +50,7 @@ export function Security() {
         }}
       />
 
-      <AccessSurfaceSection surface={surface} />
+      <AccessSurfaceSection surface={surface} onPolicyChanged={retrySurface} />
 
       {activity && activity.byChannel.length > 0 && (
         <ActivitySection channels={activity.byChannel} surface={surface} />
@@ -58,7 +60,7 @@ export function Security() {
 }
 
 // =============================================================================
-// Config Health — collapsible score bar (original design)
+// Config Health
 // =============================================================================
 
 function ConfigHealthSection({
@@ -75,7 +77,6 @@ function ConfigHealthSection({
   return (
     <section>
       <div className="bg-card rounded-xl border border-border">
-        {/* Compact summary row */}
         <button
           onClick={() => setExpanded(!expanded)}
           className="flex items-center gap-3 w-full px-4 py-3 text-left hover:bg-cream-dark/30 transition-colors"
@@ -108,7 +109,6 @@ function ConfigHealthSection({
           </button>
         </button>
 
-        {/* Expanded checklist */}
         {expanded && compliance && (
           <div className="border-t border-border/40 divide-y divide-border/40">
             <ChecklistItem label="Exec security" sublabel="Can agents run commands safely?" category={compliance.breakdown.execPosture} />
@@ -152,29 +152,15 @@ function ChecklistItem({ label, sublabel, category }: { label: string; sublabel:
 // Access Surface
 // =============================================================================
 
-function AccessSurfaceSection({ surface }: { surface: import("@/lib/api").AccessSurface }) {
-  const highRiskChannels = surface.channels.filter((c) => c.enabled && c.risk === "high");
-
+function AccessSurfaceSection({ surface, onPolicyChanged }: { surface: import("@/lib/api").AccessSurface; onPolicyChanged: () => void }) {
   return (
     <section>
       <h2 className="text-[11px] font-semibold text-ink-faint uppercase tracking-wider mb-3">Access Surface</h2>
 
-      {/* Alert for open channels */}
-      {highRiskChannels.length > 0 && (
-        <div className="bg-error/8 border border-error/20 rounded-xl px-4 py-3 mb-4">
-          <p className="text-sm text-error font-medium">
-            {highRiskChannels.map((c) => c.name).join(", ")} {highRiskChannels.length > 1 ? "have" : "has"} open access
-          </p>
-          <p className="text-xs text-ink-muted mt-0.5">
-            Anyone can message the agent through {highRiskChannels.length > 1 ? "these channels" : "this channel"}
-          </p>
-        </div>
-      )}
-
       {/* Channels */}
       <div className="bg-card rounded-xl border border-border divide-y divide-border/40 mb-4">
         {surface.channels.map((ch) => (
-          <ChannelRow key={ch.name} channel={ch} />
+          <ChannelRow key={ch.name} channel={ch} onPolicyChanged={onPolicyChanged} />
         ))}
       </div>
 
@@ -191,7 +177,7 @@ function AccessSurfaceSection({ surface }: { surface: import("@/lib/api").Access
         </div>
       )}
 
-      {/* Gateway — compact strip */}
+      {/* Gateway */}
       <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
         <GwField label="Bind" value={surface.gateway.bind} good={surface.gateway.bind === "127.0.0.1" || surface.gateway.bind === "loopback"} />
         <GwField label="Auth" value={surface.gateway.authMode} good={surface.gateway.authMode === "token"} />
@@ -212,8 +198,27 @@ function GwField({ label, value, good }: { label: string; value: string; good?: 
   );
 }
 
-function ChannelRow({ channel }: { channel: AccessChannel }) {
+function ChannelRow({ channel, onPolicyChanged }: { channel: AccessChannel; onPolicyChanged: () => void }) {
   const [expanded, setExpanded] = useState(false);
+  const [changing, setChanging] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  async function changePolicy(newPolicy: string) {
+    setChanging(true);
+    setToast(null);
+    try {
+      const result = await apiPost<{ note: string }>("/api/security/channel-policy", {
+        channel: channel.name,
+        dmPolicy: newPolicy,
+      });
+      setToast(result.note);
+      onPolicyChanged();
+    } catch (err) {
+      setToast(`Failed: ${err instanceof Error ? err.message : "unknown error"}`);
+    } finally {
+      setChanging(false);
+    }
+  }
 
   return (
     <div className={channel.risk === "high" && channel.enabled ? "bg-error/5" : ""}>
@@ -244,17 +249,77 @@ function ChannelRow({ channel }: { channel: AccessChannel }) {
       </button>
 
       {expanded && (
-        <div className="px-4 pb-3 ml-7 space-y-1 text-xs text-ink-muted">
-          <div>DM policy: <strong>{channel.dmPolicy}</strong>
-            {channel.dmPolicy === "open" && <span className="text-error"> — anyone can message</span>}
-            {channel.dmPolicy === "allowlist" && channel.allowedUsers != null && <span> — {channel.allowedUsers} approved</span>}
-            {channel.dmPolicy === "pairing" && <span className="text-warning"> — requires approval</span>}
+        <div className="px-4 pb-4 ml-7 space-y-3">
+          {/* Explanation */}
+          <p className="text-xs text-ink-muted leading-relaxed">{channel.explanation}</p>
+
+          {/* Suggestion + action buttons */}
+          {channel.suggestion && (
+            <div className="bg-cream-dark/40 rounded-lg px-3 py-2.5">
+              <p className="text-xs text-ink-muted mb-2">{channel.suggestion}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                {channel.dmPolicy !== "allowlist" && (
+                  <PolicyButton
+                    label="Switch to allowlist"
+                    onClick={() => changePolicy("allowlist")}
+                    disabled={changing}
+                  />
+                )}
+                {channel.dmPolicy !== "pairing" && channel.dmPolicy !== "allowlist" && (
+                  <PolicyButton
+                    label="Switch to pairing"
+                    onClick={() => changePolicy("pairing")}
+                    disabled={changing}
+                  />
+                )}
+                {channel.dmPolicy !== "closed" && (
+                  <PolicyButton
+                    label="Disable DMs"
+                    onClick={() => changePolicy("closed")}
+                    disabled={changing}
+                    variant="muted"
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Toast */}
+          {toast && (
+            <p className="text-xs text-ink-muted bg-cream-dark/30 rounded px-2 py-1.5">{toast}</p>
+          )}
+
+          {/* Details */}
+          <div className="text-xs text-ink-faint space-y-0.5">
+            <div>Group policy: <strong className="text-ink-muted">{channel.groupPolicy}</strong></div>
+            <div>Agents: <strong className="text-ink-muted">{channel.boundAgents.length > 0 ? channel.boundAgents.join(", ") : "default"}</strong></div>
           </div>
-          <div>Group policy: <strong>{channel.groupPolicy}</strong></div>
-          <div>Agents: <strong>{channel.boundAgents.length > 0 ? channel.boundAgents.join(", ") : "default"}</strong></div>
         </div>
       )}
     </div>
+  );
+}
+
+function PolicyButton({ label, onClick, disabled, variant }: {
+  label: string;
+  onClick: () => void;
+  disabled: boolean;
+  variant?: "muted";
+}) {
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      disabled={disabled}
+      className={cn(
+        "flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors disabled:opacity-50",
+        variant === "muted"
+          ? "bg-card border border-border text-ink-muted hover:bg-cream-dark/40"
+          : "bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20",
+      )}
+    >
+      <Lock className="w-3 h-3" />
+      {label}
+    </button>
   );
 }
 

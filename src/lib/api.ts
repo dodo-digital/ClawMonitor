@@ -622,6 +622,8 @@ export type AccessChannel = {
   allowedUsers: number | null;
   boundAgents: string[];
   risk: "low" | "medium" | "high";
+  explanation: string;
+  suggestion: string;
 };
 
 export type AccessWebhook = {
