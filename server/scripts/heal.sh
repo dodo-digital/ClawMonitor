@@ -28,11 +28,11 @@ else
   GRN=''; RED=''; YLW=''; BLD=''; RST=''
 fi
 
-log_ok()    { echo -e "${GRN}[fixed]${RST} $*"; }
-log_err()   { echo -e "${RED}[broken]${RST} $*"; }
-log_warn()  { echo -e "${YLW}[manual]${RST} $*"; }
-log_info()  { echo -e "[info] $*"; }
-log_dry()   { echo -e "${YLW}[dry-run]${RST} would: $*"; }
+log_ok()    { [[ "$JSON_OUTPUT" == "true" ]] && return; echo -e "${GRN}[fixed]${RST} $*"; }
+log_err()   { [[ "$JSON_OUTPUT" == "true" ]] && return; echo -e "${RED}[broken]${RST} $*"; }
+log_warn()  { [[ "$JSON_OUTPUT" == "true" ]] && return; echo -e "${YLW}[manual]${RST} $*"; }
+log_info()  { [[ "$JSON_OUTPUT" == "true" ]] && return; echo -e "[info] $*"; }
+log_dry()   { [[ "$JSON_OUTPUT" == "true" ]] && return; echo -e "${YLW}[dry-run]${RST} would: $*"; }
 
 # ── Parse flags ─────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
