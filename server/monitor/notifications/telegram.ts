@@ -10,6 +10,13 @@ function escapeTelegram(value: string): string {
   return value.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&");
 }
 
+const EVENT_EMOJI: Record<EventType, string> = {
+  opened: "\u{1F6A8}",    // 🚨
+  resolved: "\u2705",      // ✅
+  escalated: "\u{1F525}",  // 🔥
+  muted: "\u{1F507}",      // 🔇
+};
+
 const EVENT_HEADINGS: Record<EventType, string> = {
   opened: "Incident opened",
   resolved: "Incident resolved",
@@ -17,17 +24,97 @@ const EVENT_HEADINGS: Record<EventType, string> = {
   muted: "Incident muted (flapping)",
 };
 
+// Suggest diagnostic commands based on check type
+const DIAGNOSTIC_COMMANDS: Record<string, string[]> = {
+  "gateway.connection": [
+    "systemctl --user status openclaw-gateway",
+    "journalctl --user -u openclaw-gateway -n 30 --no-pager",
+    "fuser -v 18789/tcp",
+  ],
+  "gateway.post_update": [
+    "journalctl --user -u openclaw-gateway -n 30 --no-pager",
+    "openclaw doctor --fix",
+    "cat ~/.openclaw/watchdog-state.json",
+  ],
+  "cron.job_status": [
+    "cron-cli list --status failing",
+    "cron-cli debug {target}",
+  ],
+  "cron.job_staleness": [
+    "cron-cli debug {target}",
+    "cron-cli health",
+  ],
+  "cron.schedule_drift": [
+    "cron-cli debug {target}",
+    "cron-cli show {target}",
+  ],
+  "auth.profile_integrity": [
+    "monitor status",
+    "cat ~/.openclaw/agents/direct/agent/auth-profiles.json | python3 -m json.tool",
+  ],
+  "exec.security_config": [
+    "monitor status",
+    "cat ~/.openclaw/exec-approvals.json | python3 -m json.tool",
+  ],
+  "system.disk": [
+    "df -h /",
+    "du -sh ~/.openclaw/* | sort -rh | head -10",
+  ],
+};
+
+function formatEvidence(evidence: Record<string, unknown>): string {
+  const lines: string[] = [];
+  for (const [key, value] of Object.entries(evidence)) {
+    if (key === "job" || key === "evidence") continue; // skip nested objects
+    if (value === null || value === undefined) continue;
+    if (typeof value === "object") continue; // skip complex nested data
+    lines.push(`${key}: ${String(value)}`);
+  }
+  return lines.slice(0, 6).join("\n"); // cap at 6 key facts
+}
+
 function buildMessage(incident: IncidentRecord, eventType: EventType, check: MonitorCheckResultInput): string {
+  const emoji = EVENT_EMOJI[eventType];
   const heading = EVENT_HEADINGS[eventType];
-  return redactSecrets([
-    `*${escapeTelegram(heading)}*`,
-    `Severity: ${escapeTelegram(incident.severity)}`,
-    `Check: ${escapeTelegram(incident.check_type)}`,
-    `Target: ${escapeTelegram(incident.target_key)}`,
-    `Status: ${escapeTelegram(check.status)}`,
-    `Summary: ${escapeTelegram(check.summary)}`,
-    `Workspace: ${escapeTelegram(check.workspaceId)}`,
-  ].join("\n"));
+  const esc = escapeTelegram;
+
+  const lines: string[] = [
+    `${emoji} *${esc(heading)}* \\(${esc(incident.severity)}\\)`,
+    ``,
+    `*${esc(incident.title)}*`,
+    `${esc(check.summary)}`,
+  ];
+
+  // Add key evidence facts
+  const evidenceSummary = formatEvidence(check.evidence);
+  if (evidenceSummary) {
+    lines.push(``);
+    lines.push(`\`\`\``);
+    lines.push(evidenceSummary);
+    lines.push(`\`\`\``);
+  }
+
+  // Add incident reference
+  lines.push(``);
+  lines.push(`Incident \\#${incident.id} \\| ${esc(incident.check_type)}`);
+
+  // Add diagnostic commands for opened/escalated incidents
+  if (eventType === "opened" || eventType === "escalated") {
+    const commands = DIAGNOSTIC_COMMANDS[incident.check_type];
+    if (commands) {
+      lines.push(``);
+      lines.push(`*Diagnose:*`);
+      for (const cmd of commands) {
+        const resolved = cmd.replace("{target}", incident.target_key);
+        lines.push(`\`${esc(resolved)}\``);
+      }
+    }
+
+    lines.push(``);
+    lines.push(`_Reply to this message to investigate or fix\\._`);
+  }
+
+  return redactSecrets(lines.join("\n"));
 }
 
 export class TelegramDestination implements NotificationDestination {

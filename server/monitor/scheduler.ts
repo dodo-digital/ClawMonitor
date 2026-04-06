@@ -1,10 +1,12 @@
 import {
   runAuthProfilesCheck,
+  runCronScheduleDriftChecks,
   runCronStalenessChecks,
   runCronStatusChecks,
   runDiskCheck,
   runExecSecurityCheck,
   runGatewayCheck,
+  runPostUpdateCheck,
 } from "./checks/core.js";
 import { runSecurityScanCheck } from "./checks/security.js";
 import {
@@ -68,6 +70,28 @@ export class MonitorScheduler {
           for (const result of results) {
             await this.processor.processCheck(result);
           }
+        },
+      },
+      {
+        name: "cron-schedule-drift",
+        intervalMs: 5 * 60_000, // Every 5 minutes — drift is less urgent than status
+        timer: null,
+        inFlight: false,
+        run: async () => {
+          const results = await runCronScheduleDriftChecks();
+          for (const result of results) {
+            await this.processor.processCheck(result);
+          }
+        },
+      },
+      {
+        name: "post-update",
+        intervalMs: 60_000, // Check every minute after an update
+        timer: null,
+        inFlight: false,
+        run: async () => {
+          const result = await runPostUpdateCheck();
+          if (result) await this.processor.processCheck(result);
         },
       },
       {

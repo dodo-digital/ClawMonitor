@@ -7,12 +7,14 @@ import { readJsonFile } from "../../lib/filesystem.js";
 import { readOpenClawConfig } from "../../lib/openclaw.js";
 import {
   estimateScheduleIntervalMs,
+  getRecentRunTimestamps,
   getRegistryJobLastObservedAt,
   getRegistryRunHistory,
+  isScheduleInactive,
   readCronRegistry,
   type RegistryJob,
 } from "../cron-registry.js";
-import { getGatewayState } from "../runtime-state.js";
+import { getGatewayState, getRecentDisconnectCount, isGatewayCrashLooping } from "../runtime-state.js";
 import { DEFAULT_WORKSPACE_ID } from "../workspace.js";
 import type { MonitorCheckResultInput } from "../types.js";
 
@@ -109,6 +111,23 @@ export async function runGatewayCheck(): Promise<MonitorCheckResultInput> {
     });
   }
 
+  // Crash-loop detection: gateway may be momentarily "connected" during a
+  // restart cycle but keep disconnecting. If we've seen 3+ disconnects in
+  // the last 10 minutes, report as crash-looping regardless of current state.
+  if (isGatewayCrashLooping()) {
+    const disconnects = getRecentDisconnectCount();
+    return buildCheckResult({
+      checkType: "gateway.connection",
+      targetKey: "gateway",
+      status: "failing",
+      severity: "critical",
+      summary: `Gateway is crash-looping (${disconnects} disconnects in last 10 minutes)`,
+      dedupeKey: `${DEFAULT_WORKSPACE_ID}:gateway.connection:gateway:crash_loop`,
+      title: "Gateway crash-looping",
+      evidence: { ...state, recentDisconnects: disconnects },
+    });
+  }
+
   return buildCheckResult({
     checkType: "gateway.connection",
     targetKey: "gateway",
@@ -141,14 +160,16 @@ async function buildCronStatusCheck(job: RegistryJob): Promise<MonitorCheckResul
       });
     }
 
+    // No runs yet is expected for new jobs — the staleness check will catch
+    // jobs that should have run but haven't. Don't create noise here.
     return buildCheckResult({
       checkType: "cron.job_status",
       targetKey: job.id,
-      status: "unknown",
-      severity: "warning",
-      summary: `${job.name} has no recorded runs`,
-      dedupeKey: `${DEFAULT_WORKSPACE_ID}:cron.job_status:${job.id}:missing_runs`,
-      title: `${job.name} has no runs`,
+      status: "healthy",
+      severity: "info",
+      summary: `${job.name} has no recorded runs yet`,
+      dedupeKey: `${DEFAULT_WORKSPACE_ID}:cron.job_status:${job.id}:no_runs_yet`,
+      title: `${job.name} awaiting first run`,
       evidence: { job, lastRun: null },
     });
   }
@@ -179,6 +200,20 @@ async function buildCronStatusCheck(job: RegistryJob): Promise<MonitorCheckResul
 }
 
 async function buildCronStalenessCheck(job: RegistryJob): Promise<MonitorCheckResultInput> {
+  // Skip staleness checks during inactive windows (e.g. weekday job on a weekend)
+  if (isScheduleInactive(job.schedule, job.timezone)) {
+    return buildCheckResult({
+      checkType: "cron.job_staleness",
+      targetKey: job.id,
+      status: "healthy",
+      severity: "info",
+      summary: `${job.name} is outside its scheduled window`,
+      dedupeKey: `${DEFAULT_WORKSPACE_ID}:cron.job_staleness:${job.id}:inactive_window`,
+      title: `${job.name} is outside schedule`,
+      evidence: { job, schedule: job.schedule },
+    });
+  }
+
   const intervalMs = estimateScheduleIntervalMs(job.schedule);
   const observedAtMs = await getRegistryJobLastObservedAt(job);
 
@@ -223,6 +258,186 @@ async function buildCronStalenessCheck(job: RegistryJob): Promise<MonitorCheckRe
   });
 }
 
+// ---------------------------------------------------------------------------
+// Schedule drift check — detects over-firing and under-firing
+// ---------------------------------------------------------------------------
+
+async function buildCronScheduleDriftCheck(job: RegistryJob): Promise<MonitorCheckResultInput | null> {
+  // Only works for openclaw jobs with run history
+  if (job.layer !== "openclaw") return null;
+
+  // Skip during inactive windows — stale data from last active period isn't drift
+  if (isScheduleInactive(job.schedule, job.timezone)) return null;
+
+  const expectedMs = estimateScheduleIntervalMs(job.schedule);
+  if (!expectedMs) return null; // Can't parse schedule — skip
+
+  const timestamps = await getRecentRunTimestamps(job, 10);
+  if (timestamps.length < 3) return null; // Not enough data to analyze
+
+  // Compute intervals between consecutive runs
+  const intervals: number[] = [];
+  for (let i = 1; i < timestamps.length; i++) {
+    intervals.push(timestamps[i] - timestamps[i - 1]);
+  }
+
+  // Use median to be robust against outliers (e.g. a single delayed run)
+  const sorted = [...intervals].sort((a, b) => a - b);
+  const medianMs = sorted[Math.floor(sorted.length / 2)];
+
+  const ratio = medianMs / expectedMs;
+
+  // Over-firing: actual interval is less than 60% of expected
+  // (e.g. running every 15min when scheduled hourly → ratio ≈ 0.25)
+  if (ratio < 0.6) {
+    const actualMins = Math.round(medianMs / 60_000);
+    const expectedMins = Math.round(expectedMs / 60_000);
+    return buildCheckResult({
+      checkType: "cron.schedule_drift",
+      targetKey: job.id,
+      status: "failing",
+      severity: "critical",
+      summary: `${job.name} is over-firing: running every ~${actualMins}m but scheduled every ~${expectedMins}m (registry says "${job.schedule}")`,
+      dedupeKey: `${DEFAULT_WORKSPACE_ID}:cron.schedule_drift:${job.id}:over_firing`,
+      title: `${job.name} is over-firing`,
+      evidence: {
+        job,
+        expectedIntervalMs: expectedMs,
+        medianActualIntervalMs: medianMs,
+        ratio: Math.round(ratio * 100) / 100,
+        intervals,
+        recentTimestamps: timestamps,
+        registrySchedule: job.schedule,
+      },
+    });
+  }
+
+  // Under-firing: actual interval is more than 200% of expected
+  // (e.g. running every 2 hours when scheduled hourly → ratio ≈ 2.0)
+  if (ratio > 2.0) {
+    const actualMins = Math.round(medianMs / 60_000);
+    const expectedMins = Math.round(expectedMs / 60_000);
+    return buildCheckResult({
+      checkType: "cron.schedule_drift",
+      targetKey: job.id,
+      status: "failing",
+      severity: "warning",
+      summary: `${job.name} is under-firing: running every ~${actualMins}m but scheduled every ~${expectedMins}m (registry says "${job.schedule}")`,
+      dedupeKey: `${DEFAULT_WORKSPACE_ID}:cron.schedule_drift:${job.id}:under_firing`,
+      title: `${job.name} is under-firing`,
+      evidence: {
+        job,
+        expectedIntervalMs: expectedMs,
+        medianActualIntervalMs: medianMs,
+        ratio: Math.round(ratio * 100) / 100,
+        intervals,
+        recentTimestamps: timestamps,
+        registrySchedule: job.schedule,
+      },
+    });
+  }
+
+  return buildCheckResult({
+    checkType: "cron.schedule_drift",
+    targetKey: job.id,
+    status: "healthy",
+    severity: "info",
+    summary: `${job.name} is firing at the expected frequency`,
+    dedupeKey: `${DEFAULT_WORKSPACE_ID}:cron.schedule_drift:${job.id}:healthy`,
+    title: `${job.name} schedule is accurate`,
+    evidence: {
+      job,
+      expectedIntervalMs: expectedMs,
+      medianActualIntervalMs: medianMs,
+      ratio: Math.round(ratio * 100) / 100,
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Post-update stability check
+// ---------------------------------------------------------------------------
+
+type WatchdogState = {
+  current_version?: string;
+  previous_version?: string;
+  version_changed_at?: string;
+  version_change_pending?: boolean;
+  last_ok?: number;
+  restarts?: number[];
+};
+
+export async function runPostUpdateCheck(): Promise<MonitorCheckResultInput | null> {
+  const stateFile = path.join(env.openclawHome, "watchdog-state.json");
+  let watchdog: WatchdogState;
+  try {
+    watchdog = await readJsonFile<WatchdogState>(stateFile);
+  } catch {
+    return null; // No watchdog state file — skip
+  }
+
+  if (!watchdog.version_change_pending || !watchdog.version_changed_at) {
+    return null; // No recent version change
+  }
+
+  const changedAtMs = Date.parse(watchdog.version_changed_at);
+  const ageMs = Date.now() - changedAtMs;
+
+  // Only care about version changes in the last 2 hours
+  if (ageMs > 2 * 60 * 60_000) {
+    // Clear the pending flag — it's old news
+    try {
+      watchdog.version_change_pending = false;
+      await fs.promises.writeFile(stateFile, JSON.stringify(watchdog), "utf8");
+    } catch { /* best effort */ }
+    return null;
+  }
+
+  const crashLooping = isGatewayCrashLooping();
+  const disconnects = getRecentDisconnectCount();
+  const gwState = getGatewayState();
+
+  if (crashLooping || gwState.status !== "connected") {
+    return buildCheckResult({
+      checkType: "gateway.post_update",
+      targetKey: "gateway",
+      status: "failing",
+      severity: "critical",
+      summary: `Gateway unstable after update to ${watchdog.current_version ?? "unknown"} (from ${watchdog.previous_version ?? "unknown"}). ${crashLooping ? `Crash-looping with ${disconnects} disconnects.` : "Gateway is not connected."} The update may have introduced a breaking config change — check journalctl for details.`,
+      dedupeKey: `${DEFAULT_WORKSPACE_ID}:gateway.post_update:gateway:unstable`,
+      title: "Gateway unstable after update",
+      evidence: {
+        currentVersion: watchdog.current_version,
+        previousVersion: watchdog.previous_version,
+        versionChangedAt: watchdog.version_changed_at,
+        gatewayStatus: gwState.status,
+        crashLooping,
+        recentDisconnects: disconnects,
+      },
+    });
+  }
+
+  // Gateway survived the update — clear the pending flag
+  try {
+    watchdog.version_change_pending = false;
+    await fs.promises.writeFile(stateFile, JSON.stringify(watchdog), "utf8");
+  } catch { /* best effort */ }
+
+  return buildCheckResult({
+    checkType: "gateway.post_update",
+    targetKey: "gateway",
+    status: "healthy",
+    severity: "info",
+    summary: `Gateway stable after update to ${watchdog.current_version ?? "unknown"}`,
+    dedupeKey: `${DEFAULT_WORKSPACE_ID}:gateway.post_update:gateway:healthy`,
+    title: "Gateway stable after update",
+    evidence: {
+      currentVersion: watchdog.current_version,
+      previousVersion: watchdog.previous_version,
+    },
+  });
+}
+
 export async function runCronStatusChecks(): Promise<MonitorCheckResultInput[]> {
   const registry = await readCronRegistry();
   const jobs = registry.jobs.filter((job) => job.enabled);
@@ -233,6 +448,13 @@ export async function runCronStalenessChecks(): Promise<MonitorCheckResultInput[
   const registry = await readCronRegistry();
   const jobs = registry.jobs.filter((job) => job.enabled);
   return Promise.all(jobs.map((job) => buildCronStalenessCheck(job)));
+}
+
+export async function runCronScheduleDriftChecks(): Promise<MonitorCheckResultInput[]> {
+  const registry = await readCronRegistry();
+  const jobs = registry.jobs.filter((job) => job.enabled);
+  const results = await Promise.all(jobs.map((job) => buildCronScheduleDriftCheck(job)));
+  return results.filter((r): r is MonitorCheckResultInput => r !== null);
 }
 
 export async function runDiskCheck(): Promise<MonitorCheckResultInput> {
