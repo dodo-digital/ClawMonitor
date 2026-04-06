@@ -22,8 +22,9 @@ type SecretPattern = {
 const SECRET_PATTERNS: SecretPattern[] = [
   // Anthropic API keys
   { label: "anthropic-key", pattern: /sk-ant-[a-zA-Z0-9_-]{48,}/g, replacement: "[REDACTED_ANTHROPIC_KEY]" },
-  // OpenAI-style API keys
-  { label: "openai-key", pattern: /sk-[a-zA-Z0-9]{20,}/g, replacement: "[REDACTED_API_KEY]" },
+  // OpenAI API keys (sk-proj- prefix or legacy sk- with 40+ chars, excluding sk-ant which is Anthropic)
+  { label: "openai-key", pattern: /sk-proj-[a-zA-Z0-9_-]{40,}/g, replacement: "[REDACTED_API_KEY]" },
+  { label: "openai-key-legacy", pattern: /sk-(?!ant)[a-zA-Z0-9]{40,}/g, replacement: "[REDACTED_API_KEY]" },
   // GitHub personal access tokens
   { label: "github-token", pattern: /ghp_[a-zA-Z0-9]{36}/g, replacement: "[REDACTED_GH_TOKEN]" },
   // Slack bot tokens

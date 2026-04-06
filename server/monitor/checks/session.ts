@@ -399,16 +399,13 @@ export function runRetryLoopsCheck(): MonitorCheckResultInput {
 // ---------------------------------------------------------------------------
 
 const AUTH_ERROR_PATTERNS = [
-  "401",
-  "403",
   "unauthorized",
   "token expired",
   "token invalid",
   "auth failed",
   "authentication failed",
-  "credentials",
+  "invalid credentials",
   "access denied",
-  "forbidden",
   "invalid api key",
   "invalid_api_key",
   "api key invalid",
@@ -425,8 +422,8 @@ type AuthErrorRow = {
 
 export function runAuthErrorsCheck(): MonitorCheckResultInput {
   // Query recent failed tool calls and check output for auth patterns.
-  // We check both success=0 and all calls (some auth errors may still
-  // return success=1 with an error body).
+  // Only scan failed calls (success=0) to avoid false positives from
+  // CLI help text or successful responses that mention auth keywords.
   const rows = db
     .prepare(
       `
@@ -440,6 +437,7 @@ export function runAuthErrorsCheck(): MonitorCheckResultInput {
       FROM tool_calls tc
       WHERE (julianday('now') - julianday(tc.timestamp)) * 24 * 60 < 10
         AND tc.output IS NOT NULL
+        AND tc.success = 0
       ORDER BY tc.timestamp DESC
       LIMIT 200
     `,

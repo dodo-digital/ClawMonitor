@@ -64,6 +64,23 @@ export async function runGatewayCheck(): Promise<MonitorCheckResultInput> {
   const state = getGatewayState();
   const authFailureMinutes = minsAgo(state.lastAuthFailureAt);
 
+  // Crash-loop detection first: gateway may be momentarily "connected" during
+  // a restart cycle but keep disconnecting. If we've seen 3+ disconnects in
+  // the last 10 minutes, report as crash-looping regardless of current state.
+  if (isGatewayCrashLooping()) {
+    const disconnects = getRecentDisconnectCount();
+    return buildCheckResult({
+      checkType: "gateway.connection",
+      targetKey: "gateway",
+      status: "failing",
+      severity: "critical",
+      summary: `Gateway is crash-looping (${disconnects} disconnects in last 10 minutes)`,
+      dedupeKey: `${DEFAULT_WORKSPACE_ID}:gateway.connection:gateway:crash_loop`,
+      title: "Gateway crash-looping",
+      evidence: { ...state, recentDisconnects: disconnects },
+    });
+  }
+
   if (
     state.status !== "connected" &&
     !state.lastConnectedAt &&
@@ -108,23 +125,6 @@ export async function runGatewayCheck(): Promise<MonitorCheckResultInput> {
       dedupeKey: `${DEFAULT_WORKSPACE_ID}:gateway.connection:gateway:auth_rejected`,
       title: "Gateway auth rejected",
       evidence: state,
-    });
-  }
-
-  // Crash-loop detection: gateway may be momentarily "connected" during a
-  // restart cycle but keep disconnecting. If we've seen 3+ disconnects in
-  // the last 10 minutes, report as crash-looping regardless of current state.
-  if (isGatewayCrashLooping()) {
-    const disconnects = getRecentDisconnectCount();
-    return buildCheckResult({
-      checkType: "gateway.connection",
-      targetKey: "gateway",
-      status: "failing",
-      severity: "critical",
-      summary: `Gateway is crash-looping (${disconnects} disconnects in last 10 minutes)`,
-      dedupeKey: `${DEFAULT_WORKSPACE_ID}:gateway.connection:gateway:crash_loop`,
-      title: "Gateway crash-looping",
-      evidence: { ...state, recentDisconnects: disconnects },
     });
   }
 
