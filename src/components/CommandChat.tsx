@@ -118,8 +118,14 @@ export function CommandChat() {
         return;
       }
 
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content ?? "No response";
+      const raw = await response.text();
+      let content = "No response";
+      try {
+        const data = JSON.parse(raw);
+        content = data.choices?.[0]?.message?.content ?? `Unexpected response format: ${raw.slice(0, 100)}`;
+      } catch {
+        content = raw.slice(0, 500) || "Empty response from server";
+      }
       setMessages((prev) => {
         const updated = [...prev];
         updated[updated.length - 1] = { role: "assistant", content };
