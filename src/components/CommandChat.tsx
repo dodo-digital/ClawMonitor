@@ -104,11 +104,11 @@ export function CommandChat() {
       const response = await fetch("/api/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: apiMessages, stream: true }),
+        body: JSON.stringify({ messages: apiMessages, stream: false }),
         signal: controller.signal,
       });
 
-      if (!response.ok || !response.body) {
+      if (!response.ok) {
         const errorText = await response.text();
         setMessages((prev) => {
           const updated = [...prev];
@@ -118,39 +118,13 @@ export function CommandChat() {
         return;
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6).trim();
-          if (data === "[DONE]") break;
-
-          try {
-            const chunk = JSON.parse(data);
-            const delta = chunk.choices?.[0]?.delta?.content;
-            if (delta) {
-              setMessages((prev) => {
-                const updated = [...prev];
-                const last = updated[updated.length - 1];
-                updated[updated.length - 1] = { ...last, content: last.content + delta };
-                return updated;
-              });
-            }
-          } catch {
-            // skip
-          }
-        }
-      }
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content ?? "No response";
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[updated.length - 1] = { role: "assistant", content };
+        return updated;
+      });
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
         setMessages((prev) => {
@@ -234,7 +208,10 @@ export function CommandChat() {
                   ) : (
                     <div className="text-xs text-ink-muted leading-relaxed whitespace-pre-wrap">
                       {msg.content || (streaming && i === messages.length - 1 && (
-                        <Loader2 className="w-3 h-3 animate-spin text-ink-faint inline" />
+                        <span className="flex items-center gap-2 text-ink-faint py-1">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Working (may be running commands)...</span>
+                        </span>
                       ))}
                     </div>
                   )}
