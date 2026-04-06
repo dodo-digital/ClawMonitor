@@ -4,6 +4,7 @@ import path from "node:path";
 import { env } from "../../lib/env.js";
 import { getDiskUsage } from "../../lib/system-info.js";
 import { readJsonFile } from "../../lib/filesystem.js";
+import { readOpenClawConfig } from "../../lib/openclaw.js";
 import {
   estimateScheduleIntervalMs,
   getRegistryJobLastObservedAt,
@@ -276,7 +277,18 @@ export async function runDiskCheck(): Promise<MonitorCheckResultInput> {
 }
 
 export async function runAuthProfilesCheck(): Promise<MonitorCheckResultInput> {
-  const profilesPath = path.join(env.openclawHome, "agents", "direct", "agent", "auth-profiles.json");
+  // Resolve the primary native agent instead of hardcoding "direct"
+  let primaryAgent = "direct";
+  try {
+    const config = await readOpenClawConfig();
+    const agents = config.agents?.list ?? [];
+    const native = agents.find((a) => {
+      const rt = (a.runtime as { type?: string } | undefined)?.type;
+      return !rt || rt === "native";
+    });
+    if (native?.id) primaryAgent = String(native.id);
+  } catch { /* fall back to "direct" */ }
+  const profilesPath = path.join(env.openclawHome, "agents", primaryAgent, "agent", "auth-profiles.json");
 
   if (!fs.existsSync(profilesPath)) {
     return buildCheckResult({

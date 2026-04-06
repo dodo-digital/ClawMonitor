@@ -159,11 +159,20 @@ cronRouter.get(
     if (layer) jobs = jobs.filter((j) => j.layer === layer);
     if (category) jobs = jobs.filter((j) => j.category === category);
 
+    // Cross-reference with jobs.json to get agentId for openclaw jobs
+    let ocJobs: OpenClawJob[] = [];
+    try {
+      const jobsData = await readJobsJson();
+      ocJobs = jobsData.jobs;
+    } catch { /* no jobs.json */ }
+
     const results = await Promise.all(
       jobs.map(async (job) => {
         const health = includeHealth ? await checkHealth(job) : null;
         const stats = await getRunStats(job);
-        return { ...job, health, stats };
+        const ocJob = job.openclaw_id ? ocJobs.find((j) => j.id === job.openclaw_id) : null;
+        const agentId = ocJob?.agentId ?? (job.layer === "openclaw" ? "direct" : null);
+        return { ...job, health, stats, agentId };
       }),
     );
 
@@ -455,7 +464,17 @@ cronRouter.get(
     if (!job) throw new HttpError("Job not found", 404);
 
     // The session JSONL lives under the agent's sessions dir
-    const agentId = job.layer === "openclaw" ? "direct" : null;
+    // Resolve agentId from jobs.json instead of hardcoding "direct"
+    let agentId: string | null = null;
+    if (job.layer === "openclaw" && job.openclaw_id) {
+      try {
+        const jobsData = await readJobsJson();
+        const ocJob = jobsData.jobs.find((j) => j.id === job.openclaw_id);
+        agentId = ocJob?.agentId ?? "direct";
+      } catch {
+        agentId = "direct";
+      }
+    }
     if (!agentId) throw new HttpError("Transcripts only available for OpenClaw agent jobs", 400);
 
     const sessionFile = path.join(env.openclawHome, "agents", agentId, "sessions", `${sessionId}.jsonl`);

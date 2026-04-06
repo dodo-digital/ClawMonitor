@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useParams } from "react-router";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useCronRegistry, useExecSecurity, usePendingApprovals, apiPut, apiPost, type RegistryJob, type ExecSecuritySettings } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui/skeleton";
@@ -510,6 +511,7 @@ function ExecSecurityPanel() {
 }
 
 export function CronJobs() {
+  const { agentId } = useParams<{ agentId?: string }>();
   const { data, error, mutate } = useCronRegistry();
   const [filter, setFilter] = useState<FilterKey>("all");
   const [layerFilter, setLayerFilter] = useState<string>("all");
@@ -519,7 +521,10 @@ export function CronJobs() {
   if (error) return <ErrorState message="Failed to load cron registry" onRetry={() => mutate()} />;
   if (!data) return <PageSkeleton />;
 
-  const jobs = data.jobs;
+  // When viewed under an agent, filter to that agent's jobs
+  const jobs = agentId
+    ? data.jobs.filter((j) => j.agentId === agentId)
+    : data.jobs;
 
   const counts = { healthy: 0, failing: 0, disabled: 0, unknown: 0 };
   for (const job of jobs) counts[job.health?.status ?? "unknown"]++;

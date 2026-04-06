@@ -268,31 +268,35 @@ analyticsRouter.get(
 // Dashboard summary stats
 analyticsRouter.get(
   "/summary",
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    const agent = req.query.agent ? String(req.query.agent) : null;
+    const af = agent ? " AND agent_id = @agent" : ""; // agent filter fragment
+    const ap = agent ? { agent } : {}; // agent params
+
     const last24h = db.prepare(`
       SELECT
-        (SELECT COUNT(*) FROM agent_runs WHERE started_at > datetime('now', '-1 day')) as runs_24h,
-        (SELECT COUNT(*) FROM messages WHERE timestamp > datetime('now', '-1 day')) as messages_24h,
-        (SELECT COUNT(DISTINCT session_key) FROM agent_runs WHERE started_at > datetime('now', '-1 day')) as active_sessions_24h,
-        (SELECT COUNT(*) FROM tool_calls WHERE timestamp > datetime('now', '-1 day')) as tool_calls_24h,
-        (SELECT COUNT(*) FROM skill_triggers WHERE timestamp > datetime('now', '-1 day')) as skill_triggers_24h
-    `).get() as Record<string, number>;
+        (SELECT COUNT(*) FROM agent_runs WHERE started_at > datetime('now', '-1 day')${af}) as runs_24h,
+        (SELECT COUNT(*) FROM messages WHERE timestamp > datetime('now', '-1 day')${af}) as messages_24h,
+        (SELECT COUNT(DISTINCT session_key) FROM agent_runs WHERE started_at > datetime('now', '-1 day')${af}) as active_sessions_24h,
+        (SELECT COUNT(*) FROM tool_calls WHERE timestamp > datetime('now', '-1 day')${af}) as tool_calls_24h,
+        (SELECT COUNT(*) FROM skill_triggers WHERE timestamp > datetime('now', '-1 day')${af}) as skill_triggers_24h
+    `).get(ap) as Record<string, number>;
 
     const byChannel = db.prepare(`
       SELECT channel, source, COUNT(*) as runs
       FROM agent_runs
-      WHERE started_at > datetime('now', '-1 day')
+      WHERE started_at > datetime('now', '-1 day')${af}
       GROUP BY channel, source
       ORDER BY runs DESC
-    `).all();
+    `).all(ap);
 
     const byAgent = db.prepare(`
       SELECT agent_id, COUNT(*) as runs
       FROM agent_runs
-      WHERE started_at > datetime('now', '-1 day')
+      WHERE started_at > datetime('now', '-1 day')${af}
       GROUP BY agent_id
       ORDER BY runs DESC
-    `).all();
+    `).all(ap);
 
     const recentRuns = db.prepare(`
       SELECT
@@ -309,30 +313,36 @@ analyticsRouter.get(
           LIMIT 1
         ) as first_user_message
       FROM agent_runs r
+      ${agent ? "WHERE r.agent_id = @agent" : ""}
       ORDER BY r.started_at DESC
       LIMIT 10
-    `).all() as Array<Record<string, unknown>>;
+    `).all(ap) as Array<Record<string, unknown>>;
 
     // Strip metadata wrappers from user message previews
     for (const run of recentRuns) {
       run.first_user_message = stripUserMessageWrapper(run.first_user_message as string | null);
     }
 
+    const totalWhere = agent ? " WHERE agent_id = @agent" : "";
     ok(res, {
       last24h,
       byChannel,
       byAgent,
       recentRuns,
-      totalSessions: (db.prepare("SELECT COUNT(*) as count FROM sessions").get() as { count: number }).count,
-      totalMessages: (db.prepare("SELECT COUNT(*) as count FROM messages").get() as { count: number }).count,
-      totalEvents: (db.prepare("SELECT COUNT(*) as count FROM events").get() as { count: number }).count,
+      totalSessions: (db.prepare(`SELECT COUNT(*) as count FROM sessions${totalWhere}`).get(ap) as { count: number }).count,
+      totalMessages: (db.prepare(`SELECT COUNT(*) as count FROM messages${totalWhere}`).get(ap) as { count: number }).count,
+      totalEvents: (db.prepare(`SELECT COUNT(*) as count FROM events${totalWhere}`).get(ap) as { count: number }).count,
     });
   }),
 );
 
 analyticsRouter.get(
   "/costs",
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    const agent = req.query.agent ? String(req.query.agent) : null;
+    const af = agent ? " AND agent_id = @agent" : "";
+    const ap = agent ? { agent } : {};
+
     const summary = db.prepare(`
       SELECT
         ROUND(COALESCE(SUM(cost_total), 0), 6) as total_cost,
@@ -341,29 +351,29 @@ analyticsRouter.get(
         COUNT(*) as assistant_messages,
         SUM(CASE WHEN cost_total IS NOT NULL THEN 1 ELSE 0 END) as priced_messages
       FROM messages
-      WHERE role = 'assistant'
-    `).get() as Record<string, number>;
+      WHERE role = 'assistant'${af}
+    `).get(ap) as Record<string, number>;
 
     const byAgent = db.prepare(`
       SELECT agent_id,
              ROUND(COALESCE(SUM(cost_total), 0), 6) as total_cost,
              COUNT(*) as assistant_messages
       FROM messages
-      WHERE role = 'assistant'
+      WHERE role = 'assistant'${af}
       GROUP BY agent_id
       ORDER BY total_cost DESC, assistant_messages DESC
-    `).all();
+    `).all(ap);
 
     const byDay = db.prepare(`
       SELECT substr(timestamp, 1, 10) as day,
              ROUND(COALESCE(SUM(cost_total), 0), 6) as total_cost,
              COUNT(*) as assistant_messages
       FROM messages
-      WHERE role = 'assistant'
+      WHERE role = 'assistant'${af}
       GROUP BY substr(timestamp, 1, 10)
       ORDER BY day DESC
       LIMIT 30
-    `).all();
+    `).all(ap);
 
     ok(res, { summary, byAgent, byDay });
   }),

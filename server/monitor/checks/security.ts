@@ -12,6 +12,7 @@ import path from "node:path";
 import { db } from "../../lib/db.js";
 import { env } from "../../lib/env.js";
 import { readJsonFile } from "../../lib/filesystem.js";
+import { readOpenClawConfig } from "../../lib/openclaw.js";
 import { scanForSecrets, type SecretMatch } from "../../lib/redact.js";
 import { DEFAULT_WORKSPACE_ID } from "../workspace.js";
 import { readExecSecurityStatus, type ExecSecurityStatus } from "./core.js";
@@ -238,7 +239,18 @@ async function scoreAuthHealth(): Promise<CategoryScore> {
   const max = 20;
   const details: string[] = [];
 
-  const profilesPath = path.join(env.openclawHome, "agents", "direct", "agent", "auth-profiles.json");
+  // Resolve primary native agent instead of hardcoding "direct"
+  let primaryAgent = "direct";
+  try {
+    const config = await readOpenClawConfig();
+    const agents = config.agents?.list ?? [];
+    const native = agents.find((a) => {
+      const rt = (a.runtime as { type?: string } | undefined)?.type;
+      return !rt || rt === "native";
+    });
+    if (native?.id) primaryAgent = String(native.id);
+  } catch { /* fall back to "direct" */ }
+  const profilesPath = path.join(env.openclawHome, "agents", primaryAgent, "agent", "auth-profiles.json");
 
   if (!fs.existsSync(profilesPath)) {
     details.push("Auth profiles file is missing (-20)");

@@ -705,7 +705,21 @@ function cmdAdd(args: string[]): void {
     if (!command) die("--command is required for linux jobs");
   } else if (layer === "openclaw") {
     if (!prompt) die("--prompt is required for openclaw jobs");
-    if (!agent) agent = "direct";
+    if (!agent) {
+      // Default to first native agent from config, falling back to "direct"
+      try {
+        const configPath = path.join(OPENCLAW_HOME, "openclaw.json");
+        const raw = fs.readFileSync(configPath, "utf8");
+        const config = JSON.parse(raw) as { agents?: { list?: Array<{ id?: string; runtime?: { type?: string } }> } };
+        const native = (config.agents?.list ?? []).find((a) => {
+          const rt = a.runtime?.type;
+          return !rt || rt === "native";
+        });
+        agent = native?.id ? String(native.id) : "direct";
+      } catch {
+        agent = "direct";
+      }
+    }
     if (!sessionTarget) sessionTarget = "isolated";
     if (!thinking) thinking = "medium";
     if (!timeoutSecs) timeoutSecs = "900";

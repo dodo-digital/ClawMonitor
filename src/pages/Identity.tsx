@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useParams } from "react-router";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useBootstrapFiles, apiPut, type BootstrapFile } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +10,9 @@ import { formatNumber, cn } from "@/lib/utils";
 import { Save, FileText, Shield } from "lucide-react";
 
 export function Identity() {
-  const { data, error, mutate } = useBootstrapFiles();
+  const { agentId } = useParams<{ agentId?: string }>();
+  const agentParam = agentId ? `agent=${encodeURIComponent(agentId)}` : "";
+  const { data, error, mutate } = useBootstrapFiles(agentParam);
   const [selected, setSelected] = useState<string | null>(null);
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
@@ -22,7 +25,8 @@ export function Identity() {
   useEffect(() => {
     if (!selected) return;
     setLoading(true);
-    fetch(`/api/bootstrap/file/${selected}`)
+    const qs = agentParam ? `?${agentParam}` : "";
+    fetch(`/api/bootstrap/file/${selected}${qs}`)
       .then((r) => r.json())
       .then((json) => {
         setContent(json.data?.content ?? "");
@@ -30,7 +34,7 @@ export function Identity() {
       })
       .catch(() => setContent("Failed to load file"))
       .finally(() => setLoading(false));
-  }, [selected]);
+  }, [selected, agentParam]);
 
   // Auto-select first file
   useEffect(() => {
@@ -43,7 +47,8 @@ export function Identity() {
     if (!selected || !dirty) return;
     setSaving(true);
     try {
-      await apiPut(`/api/bootstrap/file/${selected}`, { content });
+      const qs = agentParam ? `?${agentParam}` : "";
+      await apiPut(`/api/bootstrap/file/${selected}${qs}`, { content });
       setDirty(false);
       mutate();
     } catch (e) {

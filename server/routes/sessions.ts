@@ -10,6 +10,7 @@ import { env } from "../lib/env.js";
 import { HttpError } from "../lib/errors.js";
 import { readJsonFile } from "../lib/filesystem.js";
 import { asyncHandler, ok } from "../lib/http.js";
+import { readOpenClawConfig } from "../lib/openclaw.js";
 
 /**
  * Strip OpenClaw's Telegram/Slack metadata wrapper from user messages.
@@ -109,6 +110,36 @@ function deriveChannel(sessionKey: string): string {
   return "unknown";
 }
 
+// Telegram topic labels derived from bindings config (loaded lazily)
+const topicLabelCache = new Map<string, string>();
+let topicLabelsLoaded = false;
+
+function ensureTopicLabels(): void {
+  if (topicLabelsLoaded) return;
+  topicLabelsLoaded = true;
+  try {
+    const configPath = path.join(env.openclawHome, "openclaw.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    const bindings = config.bindings ?? [];
+    const agents = config.agents?.list ?? [];
+    for (const binding of bindings) {
+      const match = binding.match;
+      const acp = binding.acp;
+      if (!match?.peer?.id) continue;
+      const peerParts = String(match.peer.id).split(":");
+      const topicId = peerParts[peerParts.length - 1];
+      if (!topicId || topicId === match.peer.id) continue;
+      // Use ACP label, agent name, or agent ID as the topic label
+      const agentId = binding.agentId ?? "";
+      const agent = agents.find((a: Record<string, unknown>) => a.id === agentId);
+      const label = acp?.label ?? (agent?.name as string | undefined) ?? agentId;
+      if (label) topicLabelCache.set(topicId, label);
+    }
+  } catch {
+    // config not found or unparseable
+  }
+}
+
 // Known cron job name mappings (loaded from jobs.json on first call)
 let cronJobNames: Map<string, string> | null = null;
 
@@ -151,14 +182,8 @@ function deriveDisplayInfo(sessionKey: string): { displayName: string; category:
     const topicIdx = parts.indexOf("topic");
     if (topicIdx !== -1 && parts[topicIdx + 1]) {
       const topicId = parts[topicIdx + 1];
-      const topicNames: Record<string, string> = {
-        "1": "General",
-        "4": "Claude Code",
-        "205": "Goal Tracker",
-        "421": "Codex / Paperclip",
-        "494": "Claude / Dodo Digital",
-      };
-      const topicName = topicNames[topicId] ?? `Topic ${topicId}`;
+      ensureTopicLabels();
+      const topicName = topicLabelCache.get(topicId) ?? `Topic ${topicId}`;
       return { displayName: `Telegram — ${topicName}`, category: "conversation" };
     }
     if (parts.includes("slash")) {
@@ -198,10 +223,6 @@ function deriveDisplayInfo(sessionKey: string): { displayName: string; category:
     return { displayName: `Cron — ${displayId}${suffix}`, category: "cron" };
   }
 
-  // Paperclip
-  if (parts.includes("paperclip")) {
-    return { displayName: "Paperclip", category: "system" };
-  }
 
   // OpenAI / ACP sessions
   if (parts.includes("openai")) {

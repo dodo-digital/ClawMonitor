@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useParams } from "react-router";
 import { PageHeader } from "@/components/layout/PageHeader";
 import {
   useQmdStatus,
@@ -47,7 +48,8 @@ type SearchResult = {
 };
 
 export function Memory() {
-  const [tab, setTab] = useState<Tab>("activity");
+  const { agentId } = useParams<{ agentId?: string }>();
+  const [tab, setTab] = useState<Tab>("agent-context");
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode; desc: string }[] = [
     { id: "agent-context", label: "Agent Context", icon: <Layers className="w-3.5 h-3.5" />, desc: "Files the agent reads every sweep and can search" },
@@ -93,7 +95,7 @@ export function Memory() {
 
       {tab === "activity" && <ActivityTab />}
       {tab === "knowledge" && <KnowledgeGraphTab />}
-      {tab === "agent-context" && <AgentContextTab />}
+      {tab === "agent-context" && <AgentContextTab agentId={agentId} />}
       {tab === "notes" && <NotesTab />}
       {tab === "search" && <SearchTab />}
     </div>
@@ -679,8 +681,9 @@ const categoryLabels: Record<string, string> = {
 
 const categoryOrder = ["identity", "policy", "contacts", "tasks", "reference", "skill", "knowledge-dir", "other"];
 
-function AgentContextTab() {
-  const { data, error, mutate } = useAgentContext();
+function AgentContextTab({ agentId }: { agentId?: string }) {
+  const agentParam = agentId ? `agent=${encodeURIComponent(agentId)}` : "";
+  const { data, error, mutate } = useAgentContext(agentParam);
   const [expandedFile, setExpandedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<AgentContextFileContent | null>(null);
   const [fileLoading, setFileLoading] = useState(false);

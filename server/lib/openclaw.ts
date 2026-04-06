@@ -50,3 +50,33 @@ export async function getExtraPaths(): Promise<string[]> {
   const extraPaths = memorySearch?.extraPaths as string[] | undefined;
   return extraPaths ?? [];
 }
+
+/** Resolve the workspace directory for a specific agent. Falls back to the default workspace. */
+export async function getAgentWorkspace(agentId: string): Promise<string> {
+  const config = await readOpenClawConfig();
+  const agents = config.agents?.list ?? [];
+  const agent = agents.find((a) => String(a.id ?? "") === agentId);
+  if (agent?.workspace && typeof agent.workspace === "string") {
+    return agent.workspace;
+  }
+  const defaults = config.agents?.defaults as Record<string, unknown> | undefined;
+  return (defaults?.workspace as string) ?? env.workspaceDir;
+}
+
+/** Get extra paths for a specific agent's memory search config. */
+export async function getAgentExtraPaths(agentId: string): Promise<string[]> {
+  const config = await readOpenClawConfig();
+  const agents = config.agents?.list ?? [];
+  const agent = agents.find((a) => String(a.id ?? "") === agentId);
+
+  // Check agent-level memorySearch.extraPaths first
+  const agentMs = (agent as Record<string, unknown> | undefined)?.memorySearch as Record<string, unknown> | undefined;
+  if (agentMs?.extraPaths && Array.isArray(agentMs.extraPaths)) {
+    return agentMs.extraPaths as string[];
+  }
+
+  // Fall back to defaults
+  const defaults = config.agents?.defaults as Record<string, unknown> | undefined;
+  const memorySearch = defaults?.memorySearch as Record<string, unknown> | undefined;
+  return (memorySearch?.extraPaths as string[] | undefined) ?? [];
+}

@@ -187,27 +187,36 @@ export type MemoryFile = {
 
 export type Agent = {
   id: string;
+  displayName: string;
   workspace: string;
   model: string | { primary: string; fallbacks: string[] };
   runtimeType: string;
   telegramBinding: Record<string, unknown> | null;
   sessionCount: number;
+  identityFiles: Array<{ name: string; exists: boolean }>;
+  cronJobCount: number;
 };
 
 export function useHealth() {
   return useApi<SystemHealth>("/api/system/health", { refreshInterval: 30_000 });
 }
 
-export function useSummary() {
-  return useApi<AnalyticsSummary>("/api/analytics/summary", { refreshInterval: 60_000 });
+/** Build a URL with optional agent query param. agentParam is "agent=xxx" or "" */
+function withAgent(base: string, agentParam: string): string {
+  if (!agentParam) return base;
+  return base.includes("?") ? `${base}&${agentParam}` : `${base}?${agentParam}`;
 }
 
-export function useCosts() {
-  return useApi<CostsSummary>("/api/analytics/costs", { refreshInterval: 60_000 });
+export function useSummary(agentParam = "") {
+  return useApi<AnalyticsSummary>(withAgent("/api/analytics/summary", agentParam), { refreshInterval: 60_000 });
 }
 
-export function useSessions() {
-  return useApi<{ items: Session[] }>("/api/sessions", { refreshInterval: 60_000 });
+export function useCosts(agentParam = "") {
+  return useApi<CostsSummary>(withAgent("/api/analytics/costs", agentParam), { refreshInterval: 60_000 });
+}
+
+export function useSessions(agentParam = "") {
+  return useApi<{ items: Session[] }>(withAgent("/api/sessions", agentParam), { refreshInterval: 60_000 });
 }
 
 export type RunSummary = {
@@ -286,6 +295,7 @@ export type RegistryJob = {
   needs_ai: boolean;
   health: RegistryHealth | null;
   stats: RunStats;
+  agentId?: string | null;
 };
 
 export type RegistryData = {
@@ -413,9 +423,9 @@ export async function updateCronJobConfig(id: string, update: { prompt?: string;
   return apiPut<{ updated: boolean }>(`/api/cron/registry/${id}/config`, update);
 }
 
-export function useBootstrapFiles() {
+export function useBootstrapFiles(agentParam = "") {
   return useApi<BootstrapData>(
-    "/api/bootstrap/files",
+    withAgent("/api/bootstrap/files", agentParam),
     { refreshInterval: 0 },
   );
 }
@@ -562,8 +572,8 @@ export type AgentContextFileContent = {
   modifiedAt: string;
 };
 
-export function useAgentContext() {
-  return useApi<AgentContextData>("/api/memory/agent-context", { refreshInterval: 60_000 });
+export function useAgentContext(agentParam = "") {
+  return useApi<AgentContextData>(withAgent("/api/memory/agent-context", agentParam), { refreshInterval: 60_000 });
 }
 
 // --- Security ---

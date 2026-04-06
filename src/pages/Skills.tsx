@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useParams } from "react-router";
 import { Search, ChevronDown, ChevronRight, Zap, FileText, Eye, EyeOff } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";

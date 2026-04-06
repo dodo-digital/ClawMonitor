@@ -9,7 +9,7 @@ import { env } from "../lib/env.js";
 import { HttpError } from "../lib/errors.js";
 import { ensureInsideBase } from "../lib/filesystem.js";
 import { asyncHandler, ok } from "../lib/http.js";
-import { getExtraPaths } from "../lib/openclaw.js";
+import { getExtraPaths, getAgentWorkspace, getAgentExtraPaths } from "../lib/openclaw.js";
 import { getQmdStatusOutput, runQmdSearch, startQmdUpdate } from "../lib/system-info.js";
 
 const cache = new TTLCache<string, unknown>();
@@ -463,10 +463,12 @@ async function getFilePreview(filePath: string): Promise<string> {
 
 memoryRouter.get(
   "/agent-context",
-  asyncHandler(async (_req, res) => {
-    const data = await cache.getOrSet("memory:agent-context", async () => {
-      const extraPaths = await getExtraPaths();
-      const workspaceDir = env.workspaceDir;
+  asyncHandler(async (req, res) => {
+    const agentId = req.query.agent ? String(req.query.agent) : null;
+    const cacheKey = agentId ? `memory:agent-context:${agentId}` : "memory:agent-context";
+    const data = await cache.getOrSet(cacheKey, async () => {
+      const extraPaths = agentId ? await getAgentExtraPaths(agentId) : await getExtraPaths();
+      const workspaceDir = agentId ? await getAgentWorkspace(agentId) : env.workspaceDir;
 
       // Resolve registered paths
       const registered = await Promise.all(
@@ -604,5 +606,37 @@ memoryRouter.get(
       }
       throw err;
     }
+  }),
+);
+
+memoryRouter.put(
+  "/agent-context/file",
+  asyncHandler(async (req, res) => {
+    const filePath = String(req.query.path ?? "").trim();
+    if (!filePath) {
+      throw new HttpError("path query parameter is required", 400);
+    }
+
+    const content = String(req.body?.content ?? "");
+
+    // Must be inside workspace or openclaw home
+    const isInWorkspace = filePath.startsWith(env.workspaceDir);
+    const isInOpenClaw = filePath.startsWith(env.openclawHome);
+    if (!isInWorkspace && !isInOpenClaw) {
+      throw new HttpError("Path must be inside workspace or OpenClaw home", 403);
+    }
+
+    // Ensure the file already exists (don't create new files via this endpoint)
+    if (!fs.existsSync(filePath)) {
+      throw new HttpError("File not found — cannot create new files via this endpoint", 404);
+    }
+
+    await fs.promises.writeFile(filePath, content, "utf8");
+
+    ok(res, {
+      path: filePath,
+      name: path.basename(filePath),
+      size: Buffer.byteLength(content, "utf8"),
+    });
   }),
 );

@@ -13,6 +13,7 @@ import { CronJobs } from "@/pages/CronJobs";
 import { Identity } from "@/pages/Identity";
 import { Memory } from "@/pages/Memory";
 import { Agents } from "@/pages/Agents";
+import { AgentProfile } from "@/pages/AgentProfile";
 import { Incidents } from "@/pages/Incidents";
 import { Security } from "@/pages/Security";
 import { IncidentDetail } from "@/pages/IncidentDetail";
@@ -36,33 +37,45 @@ export function App() {
         <Topbar />
         <main className="flex-1 p-5">
           <Routes>
+            {/* Instance-level pages */}
             <Route index element={<Dashboard />} />
 
-            {/* Activity: Sessions + Live as tabs */}
             <Route path="activity" element={<Activity />}>
               <Route index element={<Sessions />} />
               <Route path="live" element={<LiveFeed />} />
             </Route>
 
-            {/* Session detail routes (nested under activity) */}
             <Route path="activity/:agentId/:sessionId" element={<SessionRuns />} />
             <Route path="activity/:agentId/:sessionId/:runId" element={<SessionDetail />} />
 
-            {/* Redirects for old /sessions and /live routes */}
+            <Route path="incidents" element={<Incidents />} />
+            <Route path="incidents/:incidentId" element={<IncidentDetail />} />
+            <Route path="security" element={<Security />} />
+
+            {/* Agent list page */}
+            <Route path="agents" element={<Agents />} />
+
+            {/* Agent-scoped pages */}
+            <Route path="agents/:agentId" element={<AgentProfile />} />
+            <Route path="agents/:agentId/cron" element={<CronJobs />} />
+            <Route path="agents/:agentId/skills" element={<Skills />} />
+            <Route path="agents/:agentId/knowledge" element={<Memory />} />
+            <Route path="agents/:agentId/identity" element={<Identity />} />
+
+            {/* Global Skills (instance-wide view) */}
+            <Route path="skills" element={<Skills />} />
+
+            {/* Legacy top-level routes → redirect to default agent */}
+            <Route path="cron" element={<Navigate to="/agents/direct/cron" replace />} />
+            <Route path="memory" element={<Navigate to="/agents/direct/knowledge" replace />} />
+            <Route path="identity" element={<Navigate to="/agents/direct/identity" replace />} />
+            <Route path="plugins" element={<Plugins />} />
+
+            {/* Legacy session redirects */}
             <Route path="sessions" element={<Navigate to="/activity" replace />} />
             <Route path="sessions/:agentId/:sessionId" element={<RedirectSession />} />
             <Route path="sessions/:agentId/:sessionId/:runId" element={<RedirectSession />} />
             <Route path="live" element={<Navigate to="/activity/live" replace />} />
-
-            <Route path="cron" element={<CronJobs />} />
-            <Route path="skills" element={<Skills />} />
-            <Route path="identity" element={<Identity />} />
-            <Route path="memory" element={<Memory />} />
-            <Route path="agents" element={<Agents />} />
-            <Route path="plugins" element={<Plugins />} />
-            <Route path="security" element={<Security />} />
-            <Route path="incidents" element={<Incidents />} />
-            <Route path="incidents/:incidentId" element={<IncidentDetail />} />
           </Routes>
         </main>
       </div>

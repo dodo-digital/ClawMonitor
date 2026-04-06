@@ -22,6 +22,7 @@ import { env } from "../lib/env.js";
 import { HttpError } from "../lib/errors.js";
 import { safeReadTextFile, writeFileWithBackup } from "../lib/filesystem.js";
 import { asyncHandler, ok } from "../lib/http.js";
+import { getAgentWorkspace } from "../lib/openclaw.js";
 
 const writeTimestamps = new Map<string, number>();
 const DEFAULT_VERSIONS_LIMIT = 50;
@@ -122,13 +123,22 @@ function buildUnifiedDiff(fromContent: string, toContent: string, name: string, 
 
 export const bootstrapRouter = Router();
 
+/** Resolve workspace dir — uses ?agent= if provided, otherwise falls back to default */
+async function resolveWorkspace(agentParam: unknown): Promise<string> {
+  if (agentParam && typeof agentParam === "string") {
+    return getAgentWorkspace(agentParam);
+  }
+  return env.workspaceDir;
+}
+
 bootstrapRouter.get(
   "/files",
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    const workspace = await resolveWorkspace(req.query.agent);
     const versionCounts = listIdentityVersionCountsByFile();
     const files = await Promise.all(
       BOOTSTRAP_FILES.map(async (file) => {
-        const targetPath = path.join(env.workspaceDir, file.name);
+        const targetPath = path.join(workspace, file.name);
         const content = fs.existsSync(targetPath) ? await fs.promises.readFile(targetPath, "utf8") : "";
         return {
           name: file.name,
@@ -205,9 +215,10 @@ bootstrapRouter.get(
   asyncHandler(async (req, res) => {
     const name = String(req.params.name);
     assertAllowedName(name);
+    const workspace = await resolveWorkspace(req.query.agent);
     ok(res, {
       name,
-      content: await safeReadTextFile(name, env.workspaceDir),
+      content: await safeReadTextFile(name, workspace),
     });
   }),
 );
@@ -228,12 +239,13 @@ bootstrapRouter.put(
       throw new HttpError("Write rate limit exceeded for this file", 429);
     }
 
-    const targetPath = path.join(env.workspaceDir, name);
+    const workspace = await resolveWorkspace(req.query.agent);
+    const targetPath = path.join(workspace, name);
     if (fs.existsSync(targetPath)) {
-      insertIdentityVersion(name, await safeReadTextFile(name, env.workspaceDir));
+      insertIdentityVersion(name, await safeReadTextFile(name, workspace));
     }
 
-    await writeFileWithBackup(name, env.workspaceDir, content);
+    await writeFileWithBackup(name, workspace, content);
     writeTimestamps.set(name, Date.now());
 
     ok(res, {

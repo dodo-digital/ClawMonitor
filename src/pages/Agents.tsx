@@ -4,7 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/error-state";
 import { formatNumber } from "@/lib/utils";
-import { Bot, Folder, Cpu, MessageSquare, Link as LinkIcon } from "lucide-react";
+import { Bot, Folder, Cpu, MessageSquare, Link as LinkIcon, Clock, FileText } from "lucide-react";
+import { Link } from "react-router";
 
 export function Agents() {
   const { data, error, mutate } = useAgents();
@@ -28,18 +29,22 @@ export function Agents() {
 function AgentCard({ agent }: { agent: Agent }) {
   const modelName = typeof agent.model === "string" ? agent.model : agent.model.primary;
   const fallbacks = typeof agent.model === "object" ? agent.model.fallbacks : [];
+  const identityCount = agent.identityFiles?.filter((f) => f.exists).length ?? 0;
 
   return (
-    <div className="bg-card rounded-xl p-6">
+    <Link to={`/agents/${agent.id}`} className="block bg-card rounded-xl p-6 hover:ring-1 hover:ring-accent/30 transition-all">
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
           <Bot className="w-5 h-5 text-accent" />
         </div>
         <div>
-          <h3 className="text-base font-semibold text-ink">{agent.id}</h3>
-          <Badge variant={agent.runtimeType === "native" ? "accent" : "default"}>
-            {agent.runtimeType}
-          </Badge>
+          <h3 className="text-base font-semibold text-ink">{agent.displayName ?? agent.id}</h3>
+          <div className="flex items-center gap-1.5">
+            <Badge variant={agent.runtimeType === "native" ? "accent" : "default"}>
+              {agent.runtimeType}
+            </Badge>
+            <span className="text-[10px] text-ink-faint">{agent.id}</span>
+          </div>
         </div>
       </div>
 
@@ -61,11 +66,17 @@ function AgentCard({ agent }: { agent: Agent }) {
           label="Sessions"
           value={formatNumber(agent.sessionCount)}
         />
+        {agent.cronJobCount > 0 && (
+          <InfoRow icon={<Clock className="w-3.5 h-3.5" />} label="Cron Jobs" value={String(agent.cronJobCount)} />
+        )}
+        {identityCount > 0 && (
+          <InfoRow icon={<FileText className="w-3.5 h-3.5" />} label="Identity Files" value={`${identityCount} configured`} />
+        )}
         {agent.telegramBinding && (
           <InfoRow icon={<LinkIcon className="w-3.5 h-3.5" />} label="Telegram" value="Bound" />
         )}
       </div>
-    </div>
+    </Link>
   );
 }
 
