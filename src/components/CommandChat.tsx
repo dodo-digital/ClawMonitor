@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router";
 import { cn } from "@/lib/utils";
+import { useSetupStatus } from "@/lib/api";
 import { MessageSquare, Send, X, Loader2, RotateCcw } from "lucide-react";
 
 type Message = {
@@ -39,6 +40,10 @@ export function CommandChat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const location = useLocation();
+  const { data: setupStatus } = useSetupStatus();
+  const agentModel = setupStatus?.agentId
+    ? `openclaw/${setupStatus.agentId}`
+    : "openclaw/acp-clawmonitor";
 
   // Cmd+K to open/close
   useEffect(() => {
@@ -54,6 +59,20 @@ export function CommandChat() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open]);
+
+  // Listen for external open-chat events (e.g. from AgentSetupCard)
+  useEffect(() => {
+    function handleOpenChat(e: Event) {
+      const detail = (e as CustomEvent).detail as { prefill?: string } | undefined;
+      setOpen(true);
+      if (detail?.prefill) {
+        setInput(detail.prefill);
+      }
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+    window.addEventListener("openclaw:open-chat", handleOpenChat);
+    return () => window.removeEventListener("openclaw:open-chat", handleOpenChat);
+  }, []);
 
   // Focus input when opening
   useEffect(() => {
@@ -104,7 +123,7 @@ export function CommandChat() {
       const response = await fetch("/api/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: apiMessages, stream: false }),
+        body: JSON.stringify({ messages: apiMessages, model: agentModel, stream: false }),
         signal: controller.signal,
       });
 
@@ -143,7 +162,7 @@ export function CommandChat() {
       setStreaming(false);
       abortRef.current = null;
     }
-  }, [input, streaming, messages, location.pathname]);
+  }, [input, streaming, messages, location.pathname, agentModel]);
 
   return (
     <>
@@ -169,7 +188,7 @@ export function CommandChat() {
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/60">
               <MessageSquare className="w-3.5 h-3.5 text-accent" />
               <span className="text-xs font-medium text-ink">Ask OpenClaw</span>
-              <span className="text-[10px] text-ink-faint">acp-clawmonitor</span>
+              <span className="text-[10px] text-ink-faint">{setupStatus?.agentId ?? "not connected"}</span>
               {turnCount > 0 && (
                 <span className="text-[10px] text-ink-faint bg-cream-dark/60 px-1.5 py-0.5 rounded">
                   {turnCount} turn{turnCount !== 1 ? "s" : ""}
@@ -189,7 +208,14 @@ export function CommandChat() {
 
             {/* Messages */}
             <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-[120px]">
-              {messages.length === 0 && (
+              {messages.length === 0 && !setupStatus?.configured && (
+                <div className="text-center py-4">
+                  <p className="text-xs text-ink-faint">
+                    No agent connected. Set one up from the Dashboard first.
+                  </p>
+                </div>
+              )}
+              {messages.length === 0 && setupStatus?.configured && (
                 <div className="text-center py-6 space-y-2">
                   <p className="text-xs text-ink-faint">Ask anything about your OpenClaw instance.</p>
                   <div className="flex flex-wrap justify-center gap-1.5">

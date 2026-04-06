@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useHealth, useSummary, useCosts, useSessions, useSecurityLatest, apiPost, type HealResult } from "@/lib/api";
+import { AgentSetupCard } from "@/components/dashboard/AgentSetupCard";
 import { Badge, ChannelBadge, StatusDot } from "@/components/ui/badge";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/error-state";
@@ -55,6 +56,14 @@ export function Dashboard() {
 
   return (
     <div className="space-y-5">
+      <AgentSetupCard
+        onOpenChat={(prefill) => {
+          window.dispatchEvent(
+            new CustomEvent("openclaw:open-chat", { detail: { prefill } }),
+          );
+        }}
+      />
+
       {/* ── Metrics + Health — single left-aligned strip ── */}
       <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
         <Metric icon={<Activity className="w-3.5 h-3.5" />} label="Runs" value={s ? formatNumber(s.runs_24h) : "--"} />

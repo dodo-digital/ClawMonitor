@@ -858,3 +858,51 @@ export type PluginsData = {
 export function usePlugins() {
   return useApi<PluginsData>("/api/plugins", { refreshInterval: 60_000 });
 }
+
+// --- Setup / Onboarding ---
+
+export type SetupChecklist = {
+  agentConnected: boolean;
+  skillInstalled: boolean;
+  watchdogRunning: boolean;
+  securityScanRun: boolean;
+  notificationsConfigured: boolean;
+  telegramBound: boolean;
+};
+
+export type SetupPreflight = {
+  openclawInstalled: boolean;
+  openclawHome: boolean;
+  configExists: boolean;
+  gatewayReachable: boolean;
+  issues: string[];
+};
+
+export type SetupStatus = {
+  configured: boolean;
+  agentId: string | null;
+  backend: string | null;
+  agentLive: boolean;
+  needsGatewayRestart: boolean;
+  detectedBackends: string[];
+  checklist: SetupChecklist;
+  preflight?: SetupPreflight;
+  issues: string[];
+};
+
+export type ProvisionResult = {
+  success: boolean;
+  completed: string[];
+  failed: Array<{ step: string; error: string }>;
+  note: string;
+};
+
+export type TestAgentResult = {
+  success: boolean;
+  response: string;
+  latencyMs: number;
+};
+
+export function useSetupStatus() {
+  return useApi<SetupStatus>("/api/setup/status", { refreshInterval: 30_000 });
+}

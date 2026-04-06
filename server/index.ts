@@ -21,6 +21,7 @@ import { WebhookDestination } from "./monitor/notifications/webhook.js";
 import { MonitorScheduler } from "./monitor/scheduler.js";
 import { agentsRouter } from "./routes/agents.js";
 import { chatRouter } from "./routes/chat.js";
+import { setupRouter } from "./routes/setup.js";
 import { healRouter } from "./routes/heal.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { bootstrapRouter } from "./routes/bootstrap.js";
@@ -75,6 +76,7 @@ export function createApp(): Express {
   app.use("/api/security", securityRouter);
   app.use("/api/system/heal", healRouter);
   app.use("/api/chat", chatRouter);
+  app.use("/api/setup", setupRouter);
 
   if (fs.existsSync(DIST_DIR)) {
     app.use(express.static(DIST_DIR));
