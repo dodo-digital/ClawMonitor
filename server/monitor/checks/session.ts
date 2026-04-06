@@ -288,7 +288,7 @@ export function runStuckRunsCheck(): MonitorCheckResultInput {
 
   return buildCheckResult({
     checkType: "session.stuck_runs",
-    targetKey: oldest.run_id,
+    targetKey: "all-runs",
     status: "failing",
     severity: "warning",
     summary: `${rows.length} run(s) stuck in 'running' state — oldest started ${oldest.elapsed_minutes}m ago`,
